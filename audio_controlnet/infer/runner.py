@@ -13,7 +13,7 @@ from audio_controlnet.eval_utils import (ModelConfig, generate_fm, setup_eval_lo
 from audio_controlnet.model.flow_matching import FlowMatching
 from audio_controlnet.model.mean_flow import MeanFlow
 from audio_controlnet.model.networks import FluxAudio, build_text2audio_model
-from audio_controlnet.utils.runner_utils import extract_control_kwargs_from_data, safe_kwargs
+from audio_controlnet.utils.runner_utils import extract_control_kwargs_from_data, extract_model_kwargs
 from audio_controlnet.model.utils.features_utils import FeaturesUtils
 from audio_controlnet.data.extract_cond import extract_condition, extract_all_conditions, load_audio_mono, expand_to, read_and_resample, savgol_filter, extract_pitch_contour
 from audio_controlnet.data.extracted_audio import ExtractedAudio
@@ -121,14 +121,7 @@ def load_models(args, device):
     net: FluxAudio = build_text2audio_model(model.model_name, 
                                     use_rope=args.use_rope, 
                                     text_c_dim=args.text_c_dim,
-                                    **safe_kwargs(
-                                        control_types=model_cfg.get('control_types', None),
-                                        base_model_checkpoint=model_cfg.get('base_model_checkpoint', None),
-                                        conditioners_config=model_cfg.get('conditioners_config', None),
-                                        controlnets_config=model_cfg.get('controlnets_config', None),
-                                        use_lora=model_cfg.get('use_lora', None),
-                                        lora_rank=model_cfg.get('lora_rank', None),
-                                    )
+                                    **extract_model_kwargs(model_cfg),
                                     ).to(device, dtype).eval() 
     if str(args.model_path) != 'None':
         weights = load_weights_auto(args.model_path, device=device)

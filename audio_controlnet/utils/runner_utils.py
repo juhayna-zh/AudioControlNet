@@ -9,11 +9,16 @@ def extract_control_kwargs_from_data(data, cfg):
         control[name] = data[name]
     return dict(control=control)
 
-def safe_kwargs(**kwargs):
-    new_kwargs = deepcopy(kwargs)
-    for k, v in kwargs.items():
-        if v is None:
-            del new_kwargs[k]
+MODEL_KWARGS_KEYS = set([
+    'latent_dim', 'text_dim', 'hidden_dim', 'depth', 'fused_depth', 'num_heads', 'latent_seq_len',
+    'control_types', 'base_model_checkpoint', 'conditioners_config', 'controlnets_config', 'use_lora', 'lora_rank', 
+])
+
+def extract_model_kwargs(cfg):
+    new_kwargs = {}
+    for k, v in cfg.items():
+        if v is not None and k in MODEL_KWARGS_KEYS:
+            new_kwargs[k] = deepcopy(v)
     return new_kwargs
 
 def extract_mask_unmask_loss_coef(segments, target_tensor, target_rate, mask_ratio=1.0, unmask_ratio=1.0):

@@ -845,82 +845,26 @@ class MeanAudio(nn.Module):
     
 
 def fluxaudio_fm(**kwargs) -> FluxAudio: 
-    num_heads = 7
-    return FluxAudio(latent_dim=20,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=312,  # for 10s audio
-                     **kwargs)
-def control_fluxaudio_fm(**kwargs) -> FluxAudio: 
-    num_heads = 7
-    return ControlFluxAudio(latent_dim=20,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=312,  # for 10s audio
-                     **kwargs)
+    return FluxAudio(**kwargs)
     
+def control_fluxaudio_fm(**kwargs) -> FluxAudio: 
+    return ControlFluxAudio(**kwargs)
 
 def fluxaudio_s_full(**kwargs) -> FluxAudio: 
-    num_heads = 7
-    return FluxAudio(latent_dim=40,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=430,  # for 10s audio
-                     **kwargs)
+    return FluxAudio(**kwargs)
 
 
 def fluxaudio_m_full(**kwargs) -> FluxAudio: 
-    num_heads = 14
-    return FluxAudio(latent_dim=40,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=430,  # for 10s audio
-                     **kwargs)
+    return FluxAudio(**kwargs)
 
 def control_fluxaudio_m_full(**kwargs) -> FluxAudio: 
-    num_heads = 14
-    return ControlFluxAudio(latent_dim=40,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=430,  # for 10s audio
-                     **kwargs)
+    return ControlFluxAudio(**kwargs)
 
 def fluxaudio_m_full_30(**kwargs) -> FluxAudio: 
-    num_heads = 14
-    return FluxAudio(latent_dim=40,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=1291,  # for 30s audio
-                     **kwargs)
+    return FluxAudio(**kwargs)
 
 def meanaudio_mf(**kwargs) -> MeanAudio: 
-    num_heads = 7
-    return MeanAudio(latent_dim=20,
-                     text_dim=1024,
-                     hidden_dim=64 * num_heads,
-                     depth=12,
-                     fused_depth=8,
-                     num_heads=num_heads,
-                     latent_seq_len=312,  # for 10s audio
-                     **kwargs)
+    return MeanAudio(**kwargs)
 
 
 def build_text2audio_model(name: str, **kwargs) -> MeanAudio:

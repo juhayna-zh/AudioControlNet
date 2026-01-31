@@ -21,7 +21,7 @@ from audio_controlnet.model.sequence_config import CONFIG_16K, CONFIG_44K
 from audio_controlnet.model.utils.features_utils import FeaturesUtils
 from audio_controlnet.model.utils.parameter_groups import get_parameter_groups
 from audio_controlnet.model.utils.sample_utils import log_normal_sample
-from audio_controlnet.utils.runner_utils import extract_control_kwargs_from_data, safe_kwargs, extract_mask_unmask_loss_coef
+from audio_controlnet.utils.runner_utils import extract_control_kwargs_from_data, extract_model_kwargs, extract_mask_unmask_loss_coef
 from audio_controlnet.utils.dist_utils import (info_if_rank_zero, local_rank, string_if_rank_zero)
 from audio_controlnet.utils.log_integrator import Integrator
 from audio_controlnet.utils.logger import TensorboardLogger
@@ -90,14 +90,7 @@ class RunnerFlowMatching:
                                           empty_string_feat_c=empty_string_feat_c,  
                                           use_rope=cfg.use_rope,
                                           text_c_dim=cfg.data_dim.text_c_dim,
-                                          **safe_kwargs(
-                                                control_types=cfg.get('control_types', None),
-                                                base_model_checkpoint=cfg.get('base_model_checkpoint', None),
-                                                conditioners_config=cfg.get('conditioners_config', None),
-                                                controlnets_config=cfg.get('controlnets_config', None),
-                                                use_lora=cfg.get('use_lora', None),
-                                                lora_rank=cfg.get('lora_rank', None),
-                                            )
+                                          **extract_model_kwargs(cfg),
                                           ).cuda(),
                            device_ids=[local_rank],
                            broadcast_buffers=False,

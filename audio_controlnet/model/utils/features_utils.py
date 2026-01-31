@@ -44,6 +44,7 @@ class FeaturesUtils(nn.Module):
         encoder_name=Literal['clip', 't5', 't5_clap', 't5_clap_cat'], 
         mode=Literal['16k', '44k'],
         need_vae_encoder: bool = True,
+        clap_ckpt_path = "./weights/music_speech_audioset_epoch_15_esc_89.98.pt"
     ):
         super().__init__()
         
@@ -66,7 +67,7 @@ class FeaturesUtils(nn.Module):
                 self.tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-large')
                 self.text_encoder = T5EncoderModel.from_pretrained('google/flan-t5-large').eval()
                 self.laion_clap_model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base').eval()
-                self._clap_ckpt_path = "./weights/music_speech_audioset_epoch_15_esc_89.98.pt"  
+                self._clap_ckpt_path = clap_ckpt_path
                 self.laion_clap_model.load_ckpt(self._clap_ckpt_path, verbose=False)
 
             else: 
@@ -124,7 +125,7 @@ class FeaturesUtils(nn.Module):
                 truncation=True, 
                 return_tensors="pt"
             )
-            input_ids, attention_mask = tokens.input_ids.cuda(), tokens.attention_mask.cuda()
+            input_ids, attention_mask = tokens.input_ids.to(self.device), tokens.attention_mask.to(self.device)
             text_features = self.text_encoder(
                 input_ids=input_ids, 
                 attention_mask=attention_mask

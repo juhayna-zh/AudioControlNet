@@ -2,6 +2,7 @@ import dataclasses
 import logging
 from pathlib import Path
 from typing import Optional
+import os.path as op
 
 import numpy as np
 import torch
@@ -27,6 +28,7 @@ class ModelConfig:
     vae_path: Path
     bigvgan_16k_path: Optional[Path]
     mode: str
+    clap_ckpt_path: Optional[Path] = None
 
     @property
     def seq_cfg(self) -> SequenceConfig:
@@ -49,7 +51,7 @@ fluxaudio_fm = ModelConfig(model_name='fluxaudio_fm',
                            bigvgan_16k_path=Path('./weights/best_netG.pt'),
                            mode='16k')
 fluxaudio_m_full = ModelConfig(model_name='fluxaudio_m_full', 
-                                model_path=Path('./weights/fluxaudio_m_full.pth'),  # not useful 
+                                model_path=Path('./weights/fluxaudio_m_full.pth'), 
                                 vae_path=Path('./weights/v1-44.pth'),
                                 bigvgan_16k_path=None,
                                 mode='44k')
@@ -65,6 +67,16 @@ all_model_cfg: dict[str, ModelConfig] = {
     'fluxaudio_m_full': fluxaudio_m_full,
 }
 
+def get_model_config(cfg, model_dir):
+    model_dir = Path(model_dir)
+    return ModelConfig(
+        model_name = cfg.model_name,
+        model_path = model_dir/cfg.model_path,
+        vae_path = model_dir/cfg.vae_path if cfg.vae_path else None,
+        bigvgan_16k_path = model_dir/cfg.bigvgan_16k_path if cfg.bigvgan_16k_path else None,
+        mode = cfg.mode,
+        clap_ckpt_path = model_dir/cfg.clap_ckpt_path if cfg.clap_ckpt_path else None,
+    )
 
 def generate_fm(
     text: Optional[list[str]],

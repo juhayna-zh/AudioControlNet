@@ -208,13 +208,13 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
 
         return expand_to(torch.from_numpy(smooth_savgol), len=seq_len)
     
-    elif control_type == 'pitch_cwtq':
+    elif control_type == 'pitch':
         # 量化的pitch cwt特征
-        seq_len = ds.conditioners_config.pitch_cwtq.seq_len
-        target_rate = ds.conditioners_config.pitch_cwtq.target_rate
+        seq_len = ds.conditioners_config.pitch.seq_len
+        target_rate = ds.conditioners_config.pitch.target_rate
         
-        if 'pitch_cwtq' in meta and meta['pitch_cwtq'].endswith('.npy'):
-            i_pitch = np.load(meta['pitch_cwtq'])
+        if 'pitch' in meta and meta['pitch'].endswith('.npy'):
+            i_pitch = np.load(meta['pitch'])
             return torch.from_numpy(i_pitch).long()
         
         i_pitch, f0 = extract_pitch_contour(meta['path'], target_rate=target_rate, seq_len=seq_len)

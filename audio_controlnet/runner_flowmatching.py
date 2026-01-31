@@ -16,7 +16,7 @@ from omegaconf import DictConfig
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from audio_controlnet.model.flow_matching import FlowMatching
-from audio_controlnet.model.networks import get_mean_audio
+from audio_controlnet.model.networks import build_text2audio_model
 from audio_controlnet.model.sequence_config import CONFIG_16K, CONFIG_44K
 from audio_controlnet.model.utils.features_utils import FeaturesUtils
 from audio_controlnet.model.utils.parameter_groups import get_parameter_groups
@@ -83,7 +83,7 @@ class RunnerFlowMatching:
         else: 
             raise NotImplementedError(f'Encoder {cfg["text_encoder_name"]} not implemented')
         
-        self.network = DDP(get_mean_audio(cfg.model,  # get the model based on base_config.yaml
+        self.network = DDP(build_text2audio_model(cfg.model,  # get the model based on base_config.yaml
                                           latent_mean=latent_mean,  # mean and std calculated from the dataset 
                                           latent_std=latent_std,
                                           empty_string_feat=empty_string_feat,

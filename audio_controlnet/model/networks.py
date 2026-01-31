@@ -20,7 +20,7 @@ from audio_controlnet.model.embeddings import TimestepEmbedder
 from audio_controlnet.model.low_level import MLP, ChannelLastConv1d, ConvMLP, ZeroConv
 from audio_controlnet.model.transformer_layers import FinalBlock, JointBlock, MMDitSingleBlock, CrossAttentionAdapter, Conv1dFeatureExtractor, LoRALinear
 from audio_controlnet.model.conditioners import create_conditioner_from_config
-
+from audio_controlnet.infer.utils import load_weights_auto
 
 log = logging.getLogger()
 
@@ -52,7 +52,7 @@ class FluxAudio(nn.Module):
                  empty_string_feat_c: Optional[torch.Tensor] = None,
                  use_rope: bool = False,
                  use_lora: bool = False,
-                 lora_rank: int | None = None) -> None:
+                 lora_rank: Optional[int] = None) -> None:
         super().__init__()
 
         self.latent_dim = latent_dim
@@ -327,7 +327,7 @@ class ControlFluxAudio(FluxAudio):
         super().__init__(**kwargs, use_lora=use_lora)
         
         # 主模型load checkpoints
-        checkpoint = torch.load(base_model_checkpoint, map_location='cpu')
+        checkpoint = load_weights_auto(base_model_checkpoint, device='cpu')
         # 如果启用LoRA，只加载原模型的参数
         if use_lora:
             msg = self.load_state_dict(checkpoint, strict=False)
@@ -373,14 +373,10 @@ class ControlFluxAudio(FluxAudio):
         # 先从配置中读取controlnet的配置，如果没有配置则默认为原始的controlnet，控制所有层
         if control_name not in self.controlnets_config:
             assert False, "No control name specified! This may cause dangerous behavior!"
-            self.controlnets_config[control_name] = OmegaConf.create({
-                'type': 'controlnet-vanilla',
-                'control_depth': self.depth,
-            })
-        
+            
         control_cfg = self.controlnets_config[control_name]
         
-        if control_cfg.type in ('controlnet-vanilla', 'controlnet-origin'):
+        if control_cfg.type == 'controlnet-origin':
             # 创建新的 FluxAudio 实例
             controlnet = FluxAudio(**kwargs)
 
@@ -448,10 +444,9 @@ class ControlFluxAudio(FluxAudio):
         latents_dict = {name:list() for name in self.control_types}
 
         for name, cond_inp in conditions.control.items():
-            if self.controlnets_config[name]['type'] in ('controlnet-vanilla', 'controlnet-origin'):
+            if self.controlnets_config[name]['type'] == 'controlnet-origin':
                 cond_inp = self.control_input_proj[name](cond_inp)
-                if self.controlnets_config[name]['type'] == 'controlnet-origin':
-                    cond_inp += latent # NOTE: vanilla的实现中有bug，这里将其补上
+                cond_inp += latent
                 layer_latents = self.controlnet_models[name].predict_flow(cond_inp, t, conditions, \
                     return_latents=True, return_depth=self.controlnets_config[name].control_depth)
                 for i, lat in enumerate(layer_latents):
@@ -503,7 +498,7 @@ class ControlFluxAudio(FluxAudio):
             latent, text_f = block(latent, text_f, global_c, extended_c, self.latent_rot, self.text_rot, latent_adapters)  # (B, N, D)x
             if is_use_controlnet:
                 for name in conditions.control:
-                    if self.controlnets_config[name]['type'] not in ('controlnet-vanilla', 'controlnet-origin'):
+                    if self.controlnets_config[name]['type'] != 'controlnet-origin':
                         continue
                     if i < self.controlnets_config[name].control_depth:
                         latent = latent + control_latents[name][i]
@@ -528,7 +523,7 @@ class ControlFluxAudio(FluxAudio):
             latent = block(latent, extended_c, self.latent_rot, latent_adapters)
             if is_use_controlnet:
                  for name in conditions.control:
-                    if self.controlnets_config[name]['type'] not in ('controlnet-vanilla', 'controlnet-origin'):
+                    if self.controlnets_config[name]['type'] != 'controlnet-origin':
                         continue
                     if self.mm_depth + j < self.controlnets_config[name].control_depth:
                         latent = latent + control_latents[name][self.mm_depth + j]
@@ -928,7 +923,7 @@ def meanaudio_mf(**kwargs) -> MeanAudio:
                      **kwargs)
 
 
-def get_mean_audio(name: str, **kwargs) -> MeanAudio:
+def build_text2audio_model(name: str, **kwargs) -> MeanAudio:
     if name == 'meanaudio_mf':
         return meanaudio_mf(**kwargs)
     if name == 'fluxaudio_fm': 
@@ -945,25 +940,3 @@ def get_mean_audio(name: str, **kwargs) -> MeanAudio:
         return fluxaudio_s_full(**kwargs)
 
     raise ValueError(f'Unknown model name: {name}')
-
-
-if __name__ == '__main__':
-    from audio_controlnet.model.utils.sample_utils import log_normal_sample
-
-    logging.basicConfig(
-        level=logging.INFO,  
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            # logging.FileHandler("main.log"), 
-            logging.StreamHandler()          
-        ]
-    )
-
-    network: MeanAudio = get_mean_audio('meanaudio_mf', 
-                                        use_rope=False, 
-                                        text_c_dim=512)
-
-    x = torch.randn(256, 312, 20)
-    print(x.shape)
-    print('Finish')
-

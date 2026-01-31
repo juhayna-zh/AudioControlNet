@@ -41,7 +41,7 @@ def attention(
 
 class SelfAttention(nn.Module):
 
-    def __init__(self, dim: int, nheads: int, use_lora: bool = False, lora_rank: int | None = None):
+    def __init__(self, dim: int, nheads: int, use_lora: bool = False, lora_rank: Optional[int] = None):
         super().__init__()
         self.dim = dim
         self.nheads = nheads
@@ -100,7 +100,7 @@ class MMDitSingleBlock(nn.Module):
                  kernel_size: int = 7,
                  padding: int = 3,
                  use_lora: bool = False,
-                 lora_rank: int | None = None):
+                 lora_rank: Optional[int] = None):
         super().__init__()
         self.use_lora = use_lora
         self.norm1 = nn.LayerNorm(dim, elementwise_affine=False)
@@ -170,7 +170,7 @@ class MMDitSingleBlock(nn.Module):
 
 class JointBlock(nn.Module):
 
-    def __init__(self, dim: int, nhead: int, mlp_ratio: float = 4.0, pre_only: bool = False, use_lora: bool = False, lora_rank: int | None = None):
+    def __init__(self, dim: int, nhead: int, mlp_ratio: float = 4.0, pre_only: bool = False, use_lora: bool = False, lora_rank: Optional[int] = None):
         super().__init__()
         self.pre_only = pre_only
         self.latent_block = MMDitSingleBlock(dim,

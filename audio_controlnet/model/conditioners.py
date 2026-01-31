@@ -23,10 +23,9 @@ def norm_name(label):
     return label.replace('/', '_')
 
 class EventsTextConditioner(Conditioner):
-    def __init__(self, embed_dirs: tp.List[os.PathLike], output_dim: int = 20, seq_len = 312, target_rate = 31.2, \
-            fuse_method:Literal['add', 'qformer', 'flatten'] = 'add', qformer_config = None, flatten_config = None):
+    def __init__(self, embed_dirs: tp.List[os.PathLike] = [], output_dim: int = 20, seq_len = 312, target_rate = 31.2, \
+            fuse_method:Literal['add', 'qformer', 'flatten'] = 'add', qformer_config = None, flatten_config = None, embed_dims = None, clap_path = './weights/music_speech_audioset_epoch_15_esc_89.98.pt'):
         super().__init__()
-
         self.output_dim = output_dim
         self.embed_dirs = embed_dirs
         
@@ -46,7 +45,10 @@ class EventsTextConditioner(Conditioner):
             self.embed_dims.append(embed.shape[-1])
             self.embed_dicts.append(embed_dict)
         
+        if embed_dims is not None:
+            self.embed_dims = embed_dims
         self.clap = None
+        self.clap_path = clap_path 
         
         if self.fuse_method == 'add':
             # 线性映射到output_dim
@@ -68,14 +70,13 @@ class EventsTextConditioner(Conditioner):
         
     def lookup_embed(self, label):
         label_norm = norm_name(label)
-        if all([label_norm in embed_dict for embed_dict in self.embed_dicts]):
+        if len(self.embed_dicts) > 0 and all([label_norm in embed_dict for embed_dict in self.embed_dicts]):
             embeds = [torch.from_numpy(embed_dict[norm_name(label)]) for embed_dict in self.embed_dicts]
             return torch.cat(embeds)
         if self.clap is None:
             import laion_clap
             model = laion_clap.CLAP_Module(enable_fusion=False, amodel= 'HTSAT-base')
-            CLAP_CKPT_DIR = '/inspire/hdd/global_user/niuzhikang-240108120093/hainazhu/data/text_embeds/ckpt'
-            model.load_ckpt(f'{CLAP_CKPT_DIR}/music_speech_audioset_epoch_15_esc_89.98.pt', verbose=False) # download the default pretrained checkpoint.
+            model.load_ckpt(self.clap_path, verbose=False) 
             self.clap = NonTrainableWrapper(model)
         text_data = [label] 
         text_embed = self.clap.model.get_text_embedding(text_data)[0]
@@ -462,7 +463,7 @@ def create_conditioner_from_config(name, cfg):
         return EventsTextConditioner(**kwargs)
     elif cfg_type == 'loudness':
         return LoudnessConditioner(**kwargs)
-    elif cfg_type == 'pitch_cwtq':
+    elif cfg_type == 'pitch':
         return PitchCWTQConditioner(**kwargs)
     elif cfg_type == 'inpaint':
         return InpaintConditioner(**kwargs)

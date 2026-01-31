@@ -3,15 +3,15 @@ from typing import Optional
 from nitrous_ema import PostHocEMA
 from omegaconf import DictConfig
 
-from audio_controlnet.model.networks import get_mean_audio
+from audio_controlnet.model.networks import build_text2audio_model
 
 
 def synthesize_ema(cfg: DictConfig, sigma: float, step: Optional[int]):
     if not cfg.use_repa: 
         # !NOTE here we need to re-define model so be careful of passed arguments (need to be coherent with before)
-        vae = get_mean_audio(cfg.model, text_c_dim=cfg.data_dim.text_c_dim)  
+        vae = build_text2audio_model(cfg.model, text_c_dim=cfg.data_dim.text_c_dim)  
     else: 
-        vae = get_mean_audio(cfg.model, text_c_dim=cfg.data_dim.text_c_dim, 
+        vae = build_text2audio_model(cfg.model, text_c_dim=cfg.data_dim.text_c_dim, 
                              repa_layer=cfg.repa_layer,   # repa config
                              z_dim=cfg.z_dim,
                              z_len=cfg.z_len, 

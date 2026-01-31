@@ -17,7 +17,7 @@ from audio_controlnet.utils.runner_utils import extract_control_kwargs_from_data
 from audio_controlnet.model.utils.features_utils import FeaturesUtils
 from audio_controlnet.data.extract_cond import extract_condition, extract_all_conditions, load_audio_mono, expand_to, read_and_resample, savgol_filter, extract_pitch_contour
 from audio_controlnet.data.extracted_audio import ExtractedAudio
-from audio_controlnet.infer.utils import get_local_model_dir, get_model_config_and_path, load_weights_auto, merge_weights, omegaconf_resolve
+from audio_controlnet.infer.utils import get_local_model_dir, get_model_config_and_path, load_weights_auto, merge_weights, omegaconf_resolve, omegaconf_load
 from omegaconf import OmegaConf
 import librosa
 import numpy as np
@@ -29,50 +29,31 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 from tqdm import tqdm
 log = logging.getLogger()
-
+from types import SimpleNamespace
 
 def load_args(**kwargs):
-    parser = ArgumentParser()
-    parser.add_argument('--variant',
-                        type=str,
-                        default='small_16k_mf',
-                        help='small_16k_mf, small_16k_fm')
-    
-    parser.add_argument('--negative_prompt', type=str, help='Negative prompt', default='')
-    parser.add_argument('--duration', type=float, default=9.975)  # for 312 latents, seq_config should has a duration of 9.975s 
-    parser.add_argument('--cfg_strength', type=float, default=4.5)
-    parser.add_argument('--num_steps', type=int, default=25)
+    # default arguments for inference
+    defaults = dict(
+        variant='fluxaudio_m_full',
+        negative_prompt='',
+        duration=10.0,
+        cfg_strength=4.5,
+        num_steps=25,
+        full_precision=True,
+        model_path=None,
+        model_dir=None,
+        model_config=None,
+        encoder_name='t5_clap',
+        use_rope=True,
+        text_c_dim=512,
+        debug=False,
+        use_meanflow=False,
+        from_data_to_noise=True,
+    )
 
-    parser.add_argument('--full_precision', action='store_true')
-    parser.add_argument('--model_path', type=str, help='Ckpt path of trained model')
-    parser.add_argument('--model_dir', type=str, default=None)
-    parser.add_argument('--model_config', type=str, help='Training config of trained model')
-    parser.add_argument('--encoder_name', choices=['clip', 't5', 't5_clap'], type=str, help='text encoder name')
-    parser.add_argument('--use_rope', action='store_true', help='Whether or not use position embedding for model')
-    parser.add_argument('--text_c_dim', type=int, default=512, 
-                        help='Dim of the text_features_c, 1024 for pooled T5 and 512 for CLAP')
-    parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--use_meanflow', action='store_true', help='Whether or not use mean flow for inference')
-    parser.add_argument('--from_data_to_noise', action='store_true')
-    
-    
-    named_args = {
-        '--variant': 'fluxaudio_m_full',
-        '--num_steps': '25',
-        '--cfg_strength': 4.5,
-        '--encoder_name': 't5_clap',
-        '--duration': 10
-    }
-    for k, v in kwargs.items():
-        named_args[f'--{k}'] = v
-    named_args_list = []
-    for k,v in named_args.items():
-        named_args_list += [f'{k}', f'{v}']
-    named_args_list += ['--use_rope', '--full_precision', '--from_data_to_noise',]
-    
-    args = parser.parse_args(args=named_args_list)
-    
-    return args
+    defaults.update(kwargs)
+
+    return SimpleNamespace(**defaults)
 
 
 @torch.inference_mode()
@@ -87,17 +68,17 @@ def load_models(args, device):
     
     
     # load training config
-    model_config_path = args.model_config
-    model_cfg = OmegaConf.load(model_config_path)
+    model_cfg = omegaconf_load(args.model_config)
     base_model_dir = get_local_model_dir(model_cfg.base_model) if 'base_model' in model_cfg else args.model_dir
-    model_cfg = omegaconf_resolve(OmegaConf.load(model_config_path), env={'base_model_dir': base_model_dir, 'model_dir': args.model_dir})
+    model_cfg = omegaconf_resolve(model_cfg, env={'base_model_dir': base_model_dir})
     
     # For ControlNets
     if 'base_model' in model_cfg:
         base_model_config, base_model_path = get_model_config_and_path(base_model_dir)
-        base_model_config = omegaconf_resolve(OmegaConf.load(base_model_config), env={'base_model_dir': base_model_dir, 'model_dir': args.model_dir})
+        base_model_config = omegaconf_resolve(OmegaConf.load(base_model_config), env={'base_model_dir': base_model_dir})
         model_cfg = OmegaConf.merge(base_model_config, model_cfg)
         model: ModelConfig = get_model_config(model_cfg.model_config, base_model_dir)
+    # For base model (i.e. FluxAudio)
     else:
         model: ModelConfig = get_model_config(model_cfg.model_config, args.model_dir)
     
@@ -228,8 +209,7 @@ class Runner:
     def __init__(self, args, device='auto') -> None:
         models = load_models(args, device=device)
         self.models, self.args = models, args
-        self.net = self.models[1]
-        self.model_cfg = self.models[-2]
+        self.feature_utils, self.net, self.fm, self.model_cfg, self.seq_cfg = models
         self.default_control_types = deepcopy(self.net.control_types if hasattr(self.net, 'control_types') else [])
         
     def infer(self, caption='', control=None, control_types=None, **meta):
@@ -335,7 +315,13 @@ class AudioControlNet(Runner):
         return cls(model_config, model_path, model_dir, device=device)
         
     @classmethod
-    def from_multi_controlnets(cls, model_name_list):
-        ...
+    def from_multi_controlnets(cls, model_name_list, device='auto'):
+        model_dir_list = [get_local_model_dir(model_name) for model_name in model_name_list]
+        model_config_list, model_path_list = [], [] 
+        for model_dir in model_dir_list:
+            model_config, model_path = get_model_config_and_path(model_dir)
+            model_config_list.append(model_config)
+            model_path_list.append(model_path)
+        return cls(model_config_list, model_path_list, model_dir_list, device=device)
         
         

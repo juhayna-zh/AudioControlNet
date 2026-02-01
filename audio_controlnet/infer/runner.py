@@ -157,11 +157,14 @@ def run_infer(models, args, m):
     prompt = m.get('caption', '')
     extra_kwargs = {}
     if 'control' in m:
-        ctl = m['control']
-        ctl = {k:collate([v]) for k,v in ctl.items()}
-        controls = [ctl]
-        extra_kwargs['control'] = controls[0]
-    
+        if m['control'] is not None:
+            ctl = m['control']
+            ctl = {k:collate([v]) for k,v in ctl.items()}
+            controls = [ctl]
+            extra_kwargs['control'] = controls[0]
+        else:
+            del m['control']
+        
     
     log.info(f'Prompt: {prompt}')
     

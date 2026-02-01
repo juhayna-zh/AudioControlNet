@@ -216,7 +216,8 @@ class Runner:
         self.default_control_types = deepcopy(self.net.control_types if hasattr(self.net, 'control_types') else [])
         
     def infer(self, caption='', control=None, control_types=None, **meta):
-        self.net.control_types = self.default_control_types if control_types is None else control_types
+        self.net.control_types = self.default_control_types if control_types is None else control_types # specified or default
+        self.net.control_types = [ct for ct in self.net.control_types if ct in control] # use only the control types in the input
         if control is not None:
             for k in control:
                 if isinstance(control[k], ConditionInput):

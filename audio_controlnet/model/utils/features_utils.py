@@ -8,6 +8,7 @@ from einops import rearrange
 from open_clip import create_model_from_pretrained
 from torchvision.transforms import Normalize
 from transformers import T5EncoderModel, AutoTokenizer
+import numpy as np
 
 from audio_controlnet.ext.autoencoder import AutoEncoderModule
 from audio_controlnet.ext.mel_converter import get_mel_converter

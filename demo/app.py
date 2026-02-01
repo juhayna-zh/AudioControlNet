@@ -5,6 +5,10 @@ import librosa
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import json5
+import torchaudio
+import tempfile
+import os
+from audio_controlnet.infer import AudioControlNet
 
 MAX_DURATION = 10.0  # seconds
 
@@ -71,9 +75,7 @@ def visualize_events(json_str):
         return None
 
     fig, ax = plt.subplots(figsize=(8, 3))
-    
-    # 生成颜色映射，保证同一事件颜色一致
-    cmap = cm.get_cmap("tab10")  # 20种颜色循环使用
+    cmap = cm.get_cmap("tab10")
     labels = list(events.keys())
     color_map = {label: cmap(i % 10) for i, label in enumerate(labels)}
 
@@ -93,24 +95,74 @@ def visualize_events(json_str):
     fig.tight_layout()
     return fig
 
+# -----------------------------
+# AudioControlNet Initialization
+# -----------------------------
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+model = AudioControlNet.from_multi_controlnets(
+    [
+        "juhayna/T2A-Adapter-loudness-v1.0",
+        "juhayna/T2A-Adapter-pitch-v1.0",
+        "juhayna/T2A-Adapter-events-v1.0",
+    ],
+    device=DEVICE,
+)
 
 # -----------------------------
-# Placeholder T2A generation
+# Temporary WAV utility
+# -----------------------------
+def save_temp_wav(audio):
+    if audio is None:
+        return None
+    sr, y = audio
+    if y.ndim == 2:
+        y = y.mean(axis=1)
+    y = torch.from_numpy(y).float().unsqueeze(0)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    torchaudio.save(tmp.name, y, sr)
+    return tmp.name
+
+# -----------------------------
+# Generate audio
 # -----------------------------
 def generate_audio(text, cond_loudness, cond_pitch, cond_events):
-    sample_rate = 16000
-    duration = int(MAX_DURATION)
-    waveform = torch.zeros(sample_rate * duration)
-    return (sample_rate, waveform.numpy())
+    control = {}
+    temp_files = []
+
+    try:
+        if cond_loudness is not None:
+            wav_path = save_temp_wav(cond_loudness)
+            temp_files.append(wav_path)
+            control["loudness"] = model.prepare_loudness(wav_path)
+
+        elif cond_pitch is not None:
+            wav_path = save_temp_wav(cond_pitch)
+            temp_files.append(wav_path)
+            control["pitch"] = model.prepare_pitch(wav_path)
+
+        elif cond_events:
+            events = json5.loads(cond_events)
+            control["events"] = events
+
+        with torch.no_grad():
+            res = model.infer(
+                caption=text,
+                control=control if len(control) > 0 else None,
+            )
+
+        audio = res.audio.squeeze(0).cpu().numpy()
+        sr = res.sample_rate
+        return (sr, audio)
+
+    finally:
+        for f in temp_files:
+            if f and os.path.exists(f):
+                os.remove(f)
 
 # -----------------------------
 # Gradio Interface
 # -----------------------------
-blue_theme = gr.themes.Soft(
-    primary_hue="blue",
-    secondary_hue="sky",
-    neutral_hue="slate",
-)
+blue_theme = gr.themes.Soft(primary_hue="blue", secondary_hue="sky", neutral_hue="slate")
 
 EVENTS_PLACEHOLDER = '''
 // example
@@ -141,29 +193,20 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
             )
 
             with gr.Tabs() as tabs:
-                # -----------------------------
-                # Loudness Tab
-                # -----------------------------
                 with gr.Tab("Loudness") as tab_loudness:
                     with gr.Row():
                         with gr.Column(scale=1):
-                            loudness_audio = gr.Audio(label="Loudness Reference Audio", type="numpy")
+                            loudness_audio = gr.Audio(label="Loudness Reference Audio (up to 10 sec)", type="numpy")
                         with gr.Column(scale=1):
                             loudness_plot = gr.Plot(label="Loudness Curve (Reference Audio)", elem_classes="plot-small")
 
-                # -----------------------------
-                # Pitch Tab
-                # -----------------------------
                 with gr.Tab("Pitch") as tab_pitch:
                     with gr.Row():
                         with gr.Column(scale=1):
-                            pitch_audio = gr.Audio(label="Pitch Reference Audio", type="numpy")
+                            pitch_audio = gr.Audio(label="Pitch Reference Audio (up to 10 sec)", type="numpy")
                         with gr.Column(scale=1):
                             pitch_plot = gr.Plot(label="Pitch Curve (Reference Audio)", elem_classes="plot-small")
 
-                # -----------------------------
-                # Sound Events Tab
-                # -----------------------------
                 with gr.Tab("Sound Events") as tab_events:
                     with gr.Row():
                         with gr.Column(scale=1):
@@ -176,23 +219,16 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
         with gr.Column(scale=1):
             audio_output = gr.Audio(label="Generated Audio", type="numpy")
 
-    # -----------------------------
-    # 上传音频 / JSON 绘制曲线
-    # -----------------------------
     loudness_audio.change(fn=extract_loudness, inputs=loudness_audio, outputs=loudness_plot)
     pitch_audio.change(fn=extract_pitch, inputs=pitch_audio, outputs=pitch_plot)
     sound_events.change(fn=visualize_events, inputs=sound_events, outputs=events_plot)
 
-    # -----------------------------
-    # 生成按钮
-    # -----------------------------
-    generate_btn.click(fn=generate_audio,
-                       inputs=[text_prompt, loudness_audio, pitch_audio, sound_events],
-                       outputs=audio_output)
+    generate_btn.click(
+        fn=generate_audio,
+        inputs=[text_prompt, loudness_audio, pitch_audio, sound_events],
+        outputs=audio_output
+    )
 
-    # -----------------------------
-    # Tab 切换清空其他条件
-    # -----------------------------
     tab_loudness.select(lambda: (None, None), [], [pitch_audio, sound_events])
     tab_pitch.select(lambda: (None, None), [], [loudness_audio, sound_events])
     tab_events.select(lambda: (None, None), [], [loudness_audio, pitch_audio])
@@ -206,4 +242,7 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
     """)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860
+    )

@@ -89,6 +89,12 @@ torchaudio.save('./output/events_controlled.wav', res.audio, res.sample_rate)
 Combine multiple control conditions for fine-grained control:
 
 ```python
+model = AudioControlNet.from_multi_controlnets([
+    'juhayna/T2A-Adapter-loudness-v1.0',
+    'juhayna/T2A-Adapter-pitch-v1.0',
+    'juhayna/T2A-Adapter-events-v1.0',
+])
+
 # Use multiple controls simultaneously
 res = model.infer(
     caption=caption,
@@ -101,22 +107,6 @@ res = model.infer(
 torchaudio.save('./output/multi_controlled.wav', res.audio, res.sample_rate)
 ```
 
-### 5. Individual ControlNet Usage
-
-Load and use individual control adapters:
-
-```python
-# Load individual ControlNets
-loudness_model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-loudness-v1.0')
-pitch_model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-pitch-v1.0')
-events_model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-events-v1.0')
-
-# Use individual models
-loudness_result = loudness_model.infer(
-    caption="Calm ambient music",
-    control={'loudness': loudness_model.prepare_loudness('./reference.flac')}
-)
-```
 
 ## 🎛️ Web Interface
 

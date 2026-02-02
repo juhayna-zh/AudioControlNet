@@ -123,7 +123,7 @@ loudness_result = loudness_model.infer(
 Launch the Gradio web interface for interactive audio generation:
 
 ```bash
-python app.py
+gradio app.py
 ```
 
 The web interface provides:
@@ -131,23 +131,6 @@ The web interface provides:
 - Interactive control condition setup
 - Real-time visualization of loudness, pitch, and events
 - Audio playback and download
-
-## 🔧 Advanced Configuration
-
-### Model Parameters
-
-You can customize generation parameters:
-
-```python
-# Custom generation parameters
-res = model.infer(
-    caption="Your text prompt",
-    control={'loudness': model.prepare_loudness('./reference.flac')},
-    duration=15.0,        # Audio duration in seconds
-    cfg_strength=4.5,     # Classifier-free guidance strength
-    num_steps=25          # Number of diffusion steps
-)
-```
 
 ## 🚂 Training
 

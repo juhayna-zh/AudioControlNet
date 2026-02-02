@@ -21,10 +21,7 @@ def get_local_model_dir(model_id_or_path: str) -> str:
         return str(p.resolve())
 
     # view as HF repo_id
-    return snapshot_download(
-        repo_id=model_id_or_path,
-        local_files_only=True,
-    )
+    return snapshot_download(repo_id=model_id_or_path)
 
 def get_model_config_and_path(model_dir):
     model_config = None

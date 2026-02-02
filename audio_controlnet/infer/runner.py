@@ -56,7 +56,7 @@ def load_args(**kwargs):
     return SimpleNamespace(**defaults)
 
 
-@torch.inference_mode()
+@torch.no_grad()
 def load_models(args, device):
     setup_eval_logging()
     

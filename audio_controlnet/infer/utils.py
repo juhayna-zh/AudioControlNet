@@ -50,14 +50,6 @@ def merge_weights(
         merged.update(sd)
     return merged
 
-def merge_weights(
-    state_dicts: Iterable[Dict[str, torch.Tensor]],
-) -> Dict[str, torch.Tensor]:
-    merged = OrderedDict()
-    for sd in state_dicts:
-        merged.update(sd)
-    return merged
-
 def load_weights_auto(
     ckpt_path: Union[str, Path, Iterable[Union[str, Path]]],
     device="cpu",

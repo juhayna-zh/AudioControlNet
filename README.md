@@ -4,18 +4,22 @@
   <a href='#'><img alt="Static Badge" src="https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white"></a>
   <a href='https://arxiv.org/abs/COMING.SOON'><img alt="Static Badge" src="https://img.shields.io/badge/arXiv-COMING.SOON-%23b31b1b?logo=arxiv&link=https%3A%2F%2Farxiv.org%2F"></a>
   <a href='https://huggingface.co/spaces/chenxie95/AudioControlNet'><img alt="Static Badge" src="https://img.shields.io/badge/Huggingface%20Space-AudioControlNet-%23FFD21E?logo=huggingface"></a>
-  <a href='https://audio-controlnet.github.io/'><img alt="Static Badge" src="https://img.shields.io/badge/demo-page-green?logo=github&logoColor=white"></a>
+  <a href='https://audio-controlnet.github.io/'><img alt="Static Badge" src="https://img.shields.io/badge/Website-Demo-green?logo=github&logoColor=white"></a>
 </div>
+
+
+This is the official repository for the paper "Audio ControlNet for Fine-Grained Audio Generation and Editing".
+
+Audio ControlNet enables fine-grained control over audio generation through multiple conditioning mechanisms including loudness, pitch, and sound events. This allows for precise audio synthesis and editing with controllable attributes.
+
 
 <p>
   <a href="https://huggingface.co/spaces/chenxie95/AudioControlNet">Huggingface Space Demo</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="https://audio-controlnet.github.io/">Web Demo</a>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://huggingface.co/collections/juhayna/audio-controlnet">HuggingFace Checkpoints</a>
 </p>
-
-This is the official repository for the paper "Audio ControlNet for Fine-Grained Audio Generation and Editing".
-
-Audio ControlNet enables fine-grained control over audio generation through multiple conditioning mechanisms including loudness, pitch, and sound events. This allows for precise audio synthesis and editing with controllable attributes.
 
 ## 🎯 Supported Control Types
 

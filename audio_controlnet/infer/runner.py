@@ -140,7 +140,7 @@ class AudioOutput:
     audio: torch.Tensor
     sample_rate: int
 
-@torch.inference_mode()
+@torch.no_grad()
 def run_infer(models, args, m):
     feature_utils, net, fm, model_cfg, seq_cfg = models
     negative_prompt: str = args.negative_prompt

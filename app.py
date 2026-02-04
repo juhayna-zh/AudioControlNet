@@ -39,14 +39,6 @@ RANDOM_EXAMPLES = [
     }
   },
   {
-    "caption": "Animals, dogs, and people are growling, shouting, and speaking.",
-    "events": {
-      "Dog": [[0.005, 0.165], [0.717, 1.529], [1.981, 3.139], [3.569, 4.562], [4.87, 5.964], [6.389, 7.621], [8.067, 8.98], [9.299, 9.878]],
-      "Speech": [[0.149, 0.738], [1.609, 1.954], [4.583, 4.886], [7.631, 8.024], [9.007, 9.288]],
-      "Male speech, man speaking": [[3.202, 3.532], [5.975, 6.378], [9.878, 10.0]]
-    }
-  },
-  {
     "caption": "Water flows and dishes clatter with child speech and laughter.",
     "events": {
       "Child speech, kid speaking": [[0.0, 1.503], [1.732, 2.12], [2.942, 3.541], [7.803, 8.493]],
@@ -252,6 +244,9 @@ def generate_audio(text, cond_loudness, cond_pitch, cond_events):
 # -----------------------------
 blue_theme = gr.themes.Soft(primary_hue="blue", secondary_hue="sky", neutral_hue="slate")
 
+# Generate initial random example for page load
+initial_caption, initial_events = generate_random_example()
+
 CAPTION_PLACEHOLDER = 'Water flows and dishes clatter with child speech and laughter.'
 
 EVENTS_PLACEHOLDER = '''
@@ -281,13 +276,14 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
                 label="Text Prompt",
                 placeholder=CAPTION_PLACEHOLDER,
                 lines=4,
+                value=initial_caption,
             )
 
             with gr.Tabs() as tabs:
                 with gr.Tab("Sound Events") as tab_events:
                     with gr.Row():
                         with gr.Column(scale=1):
-                            sound_events = gr.Textbox(label="Sound Events (JSON)", placeholder=EVENTS_PLACEHOLDER, lines=8)
+                            sound_events = gr.Textbox(label="Sound Events (JSON)", placeholder=EVENTS_PLACEHOLDER, lines=8, value=initial_events)
                             random_example_btn = gr.Button("🎲 Random Example", variant="primary", size="sm")
                         with gr.Column(scale=1):
                             events_plot = gr.Plot(label="Sound Events Roll", elem_classes="plot-small")
@@ -314,6 +310,9 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
     loudness_audio.change(fn=extract_loudness, inputs=loudness_audio, outputs=loudness_plot)
     pitch_audio.change(fn=extract_pitch, inputs=pitch_audio, outputs=pitch_plot)
     sound_events.change(fn=visualize_events, inputs=sound_events, outputs=events_plot)
+    
+    # Initialize events plot with the initial random example
+    demo.load(fn=lambda: visualize_events(initial_events), inputs=[], outputs=events_plot)
     
     # Random example button event
     random_example_btn.click(

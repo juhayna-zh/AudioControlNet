@@ -243,7 +243,7 @@ class FluxAudio(nn.Module):
             latent = block(latent, extended_c, self.latent_rot)
             latents.append(latent)
         
-        # 如果是作为controlnet使用，则只需要返回每一层的latent
+        # If it is used as a controlnet, it only returns the latent of each layer
         if return_latents:
             return latents
 
@@ -326,9 +326,9 @@ class ControlFluxAudio(FluxAudio):
                  ):
         super().__init__(**kwargs, use_lora=use_lora)
         
-        # 主模型load checkpoints
+        # load checkpoints of base model
         checkpoint = load_weights_auto(base_model_checkpoint, device='cpu')
-        # 如果启用LoRA，只加载原模型的参数
+        # if use LoRA，only load the param of original model
         if use_lora:
             msg = self.load_state_dict(checkpoint, strict=False)
             for key in msg.missing_keys:
@@ -336,8 +336,8 @@ class ControlFluxAudio(FluxAudio):
                     raise RuntimeError(f"Missing key: {key}")
         else:
             self.load_state_dict(checkpoint)
-        # 将主模型的梯度关闭
-        # 若启用LoRA，则保留LoRA部分的梯度
+        # stop grad backprop for base model
+        # if enable LoRA，keep the grad backprop in the LoRA
         if use_lora:
             lora_params_cnt = 0
             for name, param in self.named_parameters():
@@ -351,11 +351,11 @@ class ControlFluxAudio(FluxAudio):
                 p.requires_grad_(False)
         log.info(f"Loaded base model checkpoint from {base_model_checkpoint}")
 
-        # 负责预处理控制输入
+        # conditioners handling condition input
         self.conditioners = nn.ModuleDict()
-        # 每个控制项对应一个独立的控制网络（复制自身结构）
+        # Each control input corresponds to an independent controlnet
         self.controlnet_models = nn.ModuleDict()
-        # 每个controlnet的zero-conv层
+        # zero-conv projection layer for controlnet
         self.control_input_proj = nn.ModuleDict()
         self.control_latent_proj = nn.ModuleDict()
         self.control_types = control_types
@@ -367,31 +367,31 @@ class ControlFluxAudio(FluxAudio):
             self._init_controlnet(name, **kwargs)
             self.empty_control_dim[name] = conditioners_config[name]['output_dim']
             
-        self._flag_is_getting_empty_condition = False # 在做CFG推理时是允许无control输入的，这里用这个flag来标记，以阻止CFG推理时打印warning
+        self._flag_is_getting_empty_condition = False # No control input is legal during CFG inference. This flag is used to mark and prevent printing warnings during CFG inference
         
     def _init_controlnet(self, control_name, **kwargs):
-        # 先从配置中读取controlnet的配置，如果没有配置则默认为原始的controlnet，控制所有层
+        # First, read the configuration of controlnet from the configuration
         if control_name not in self.controlnets_config:
             assert False, "No control name specified! This may cause dangerous behavior!"
             
         control_cfg = self.controlnets_config[control_name]
         
         if control_cfg.type == 'controlnet-origin':
-            # 创建新的 FluxAudio 实例
+            # Create a new FluxAudio instance
             controlnet = FluxAudio(**kwargs)
 
-            # 将当前主模型中的模块参数复制过去
+            # Copy the parameters from the base model
             for name, module in controlnet.named_children():
                 if hasattr(self, name):
                     source_module = getattr(self, name)
                     if isinstance(source_module, nn.Module) and isinstance(module, nn.Module):
                         module.load_state_dict(source_module.state_dict())
                     else:
-                        setattr(controlnet, name, deepcopy(source_module))  # 处理非Module类型（如nn.Parameter）
+                        setattr(controlnet, name, deepcopy(source_module))  # Handling non-Module objects (such as nn.Parameter)
                 else:
                     raise ValueError(f'Module {name} not found in main net!')
             
-            # 将controlnet的梯度打开
+            # Turn on the grad-backprop of controlnet
             for p in controlnet.parameters():
                 p.requires_grad_(True)
             controlnet.latent_mean.requires_grad_(False)  # (1, 1, d)
@@ -400,7 +400,7 @@ class ControlFluxAudio(FluxAudio):
             controlnet.empty_string_feat_c.requires_grad_(False)
             
             self.controlnet_models[control_name] = controlnet
-            # 网络输入的proj，和每一层的proj
+            # The proj of the network input, and the proj of each layer
             self.control_input_proj[control_name] = ZeroConv(self.latent_dim, self.latent_dim, channel_last=True)
             self.control_latent_proj[control_name] = nn.ModuleList([ZeroConv(self.hidden_dim, self.hidden_dim, channel_last=True) for i in range(self.depth)])
         elif control_cfg.type == 'cross-attn-adapter':

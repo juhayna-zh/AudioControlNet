@@ -241,31 +241,33 @@ class Conv1dFeatureExtractor(nn.Module):
     def __init__(self, conv_configs, activation="SiLU"):
         """
         Args:
-            conv_configs (list of list): 每一层 Conv1d 的参数（位置参数形式）; 顺序: in_channels, out_channels, kernel_size, stride, padding
-            activation (str): 激活函数名，必须是 torch.nn 里存在的类，比如 "ReLU", "SiLU", "GELU"
+            conv_configs (list of list): Parameters for each Conv1d layer (positional arguments);
+                order: in_channels, out_channels, kernel_size, stride, padding.
+            activation (str): Name of the activation function. Must correspond to a class
+                available in torch.nn, e.g., "ReLU", "SiLU", "GELU".
+
         Example:
             conv_configs:
             - [2, 16, 3, 2, 1]      # conv1d_1
             - [16, 16, 3, 1, 1]     # conv1d_2
-            - [16, 128, 3, 2, 1]    # conv1d_3
-            - [128, 128, 3, 1, 1]   # conv1d_4
-            - [128, 256, 3, 2, 1]   # conv1d_5
-            
+            - [16, 128, 3, 2, 1]   # conv1d_3
+            - [128, 128, 3, 1, 1]  # conv1d_4
+            - [128, 256, 3, 2, 1]  # conv1d_5
+
             activation: SiLU
-        
         """
         super().__init__()
         layers = []
 
-        # 获取激活层类（构造时实例化）
+        # get activation function
         act_layer = getattr(nn, activation)()
 
         for cfg in conv_configs:
-            conv = nn.Conv1d(*cfg)  # 用位置参数
+            conv = nn.Conv1d(*cfg)  
             layers.append(conv)
             layers.append(act_layer)
 
-        # 最后一层不加激活
+        # No activation in the final layer.
         if len(layers) > 0:
             layers = layers[:-1]
 
@@ -337,8 +339,8 @@ class CrossAttention(nn.Module):
 class CrossAttentionAdapter(nn.Module):
     def __init__(self, dim: int, nheads: int):
         super().__init__()
-        self.norm = nn.LayerNorm(dim, elementwise_affine=True)  # 对输入做LayerNorm
-        self.cross_attn = CrossAttention(dim, nheads)           # 内部cross attention
+        self.norm = nn.LayerNorm(dim, elementwise_affine=True)  # LayerNorm
+        self.cross_attn = CrossAttention(dim, nheads)           # cross attention
 
     def forward(
         self,
@@ -347,9 +349,6 @@ class CrossAttentionAdapter(nn.Module):
         rot: Optional[torch.Tensor] = None,
         rot_kv: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        """
-        直接执行cross attention
-        """
         x_norm = self.norm(x)
         out = self.cross_attn(x_norm, context, rot, rot_kv)
         return out

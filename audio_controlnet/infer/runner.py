@@ -238,25 +238,24 @@ class Runner:
         
         y = read_and_resample(path, self.sample_rate)
             
-        # 设置hop_length使RMS采样频率为target_rate
+        # Set hop_length to make the RMS sampling frequency equal to target_rate
         hop_length = int(self.sample_rate / target_rate)  
-        frame_length = 4096  # 可保留原值，也可根据hop_length调整
+        frame_length = 4096 
 
-        # 计算RMS
+        # calculate RMS
         rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
 
-        # 计算分贝
+        # calculate dB
         min_rms = 1e-6
         rms = np.maximum(rms, min_rms)
         dB = 20 * np.log10(rms / np.max(rms))
 
-        # savgol平滑
+        # savgol filter
         smooth_savgol = savgol_filter(dB, window_length=11, polyorder=3)
 
         return LoudnessCondition(expand_to(torch.from_numpy(smooth_savgol), len=seq_len))
 
     def prepare_pitch(self, path):
-        # 量化的pitch cwt特征
         seq_len = self.model_cfg.conditioners_config.pitch.seq_len
         target_rate = self.model_cfg.conditioners_config.pitch.target_rate
         
@@ -281,7 +280,6 @@ class Runner:
 
         plt.figure(figsize=(8, 4), dpi=dpi)
 
-        # 支持多条线：二维数据 (N, M)
         if data.ndim == 2:
             for i in range(data.shape[1]):
                 plt.plot(data[:, i], label=f"{tag}_{i}", color=line_color)
@@ -290,20 +288,19 @@ class Runner:
             plt.plot(data, label=tag, color=line_color)
             plt.legend()
 
-        # 设置标题与坐标轴
         plt.title(tag)
         plt.xlabel(xlabel)
         if ylabel:
             plt.ylabel(ylabel)
         plt.grid(True, linestyle="--", alpha=0.5)
         
-        # 横坐标数值除以25显示
+        # xtrcik div 25
         formatter = FuncFormatter(lambda x, _: round(x / target_rate, 1))
         plt.gca().xaxis.set_major_formatter(formatter)
 
-        # 保存文件
+        # save file
         plt.savefig(fpath, bbox_inches="tight")
-        plt.close()  # 防止内存泄漏（很重要）
+        plt.close()  
         
         
 class AudioControlNet(Runner):

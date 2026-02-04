@@ -35,7 +35,7 @@ class EventsTextConditioner(Conditioner):
         self.target_rate = target_rate
         self.fuse_method = fuse_method
         
-        # 预先读取embedding
+        # preload the embeddings
         for d in self.embed_dirs:
             embed_dict = {}
             for fname in os.listdir(d):
@@ -51,7 +51,7 @@ class EventsTextConditioner(Conditioner):
         self.clap_path = clap_path 
         
         if self.fuse_method == 'add':
-            # 线性映射到output_dim
+            # projection to output_dim
             self.linear = nn.Linear(sum(self.embed_dims), output_dim)
         elif self.fuse_method == 'qformer':
             from .qformer import EventQFormerWrapper
@@ -89,7 +89,7 @@ class EventsTextConditioner(Conditioner):
         seq_len = self.seq_len
         target_rate = self.target_rate
 
-        # 处理每个事件，将其时间步对应的张量直接加在result_tensor上
+        # Process each event and add the tensor at its corresponding time step directly to result_tensor.
         if self.fuse_method == 'add':
             for events in x:
                 result_tensor = torch.zeros((self.output_dim, seq_len), ).float().to(device)
@@ -128,18 +128,18 @@ class EventsTextConditioner(Conditioner):
             for events in x:
                 result_seq = [[] for _ in range(self.seq_len)]
 
-                # 遍历 label（字符串），逐个 lookup
+                # Iterate over the labels (strings) and perform lookup for each one.
                 for label, time_list in events.items():
                     this_embed = self.linear(self.lookup_embed(label).to(device))
                     for st, et in time_list:
                         start = round(st * target_rate)
                         end = round(et * target_rate)
-                        # torch.arange 代替 python for
+                        # torch.arange(avoid directly using python `for``)
                         t_idx = torch.arange(start, end, device=device)
                         for t in t_idx.tolist():
                             result_seq[t].append(this_embed)
 
-                # 构建 result_tensor
+                # make result_tensor
                 result_tensor = []
                 for sub_seq in result_seq:
                     result_tensor.extend(sub_seq)
@@ -185,33 +185,33 @@ class EditConditioner(EventsTextConditioner):
 
     def forward(self, inputs: tp.Dict[str, tp.Any], device=None) -> torch.Tensor:
         
-        # 获取events的embedding
+        # get the embedding of events
         events = [x['events'] for x in inputs]
         events_emb = super().forward(events, device) # [batch, seq_len, hidden_dim]
         
-        # 获取reference的vae latent
+        # get the VAE latent of the reference.
         self.tod.model.to(device)
         self.mel_converter.model.to(device)
         
-        # 对输入的音频padding到需要的长度
+        # pad the input audio to the required length.
         target_len = int(self.seq_len / self.target_rate * self.sample_rate)
         # breakpoint()
         batch_waveforms = []
         for datum in inputs:
             audio = datum['reference']['audio'].to(device)
 
-            # 1. padding / trim 到目标长度
+            # 1. padding / trim to target length
             if audio.shape[-1] < target_len:
                 pad_len = target_len - audio.shape[-1]
                 audio = F.pad(audio, (0, pad_len))
             else:
-                audio = audio[:, :target_len]  # 假设 audio shape [1, T]
+                audio = audio[:, :target_len]  # audio shape [1, T]
 
             batch_waveforms.append(audio.clone())
 
         x = torch.stack(batch_waveforms, dim=0)  # [B, 1, T]
         
-        # 获取audio的vae latent
+        # get the vae latent of audio
         mel = self.mel_converter.model(x.squeeze(dim=1))
         dist = self.tod.model.encode(mel)
         if 'a_randn' in inputs[0]:
@@ -221,7 +221,7 @@ class EditConditioner(EventsTextConditioner):
             latent = dist.sample().detach() # [B, output_dim, seq_len]
         latent = latent.permute(0, 2, 1) # [B, seq_len, output_dim]
             
-        # 进行最后的linear
+        # final linear layer
         return self.final_linear(torch.cat([events_emb, latent], dim=-1))
 
     @torch.no_grad()
@@ -243,10 +243,10 @@ class LoudnessConditioner(Conditioner):
         self.target_rate = target_rate
 
     def forward(self, x: torch.Tensor, device=None) -> torch.Tensor:
-        # 得到形状为 [B, 1, Seq] 的张量
+        # get a tensor shaped [B, 1, Seq] 
         x = x.unsqueeze(1)  # [B, 1, Seq]
         
-        # 将张量沿着output_dim维度重复，得到形状为 [B, output_dim, Seq]
+        # Repeat the tensor along the output_dim dimension to get a shape of [B, output_dim, Seq].
         x = x.repeat(1, self.output_dim, 1)  # [B, output_dim, Seq]
             
         return x.permute(0, 2, 1).to(device).contiguous() # [batch, seq_len, hidden_dim]
@@ -258,35 +258,35 @@ class PitchCWTQConditioner(Conditioner):
         self.emb_dim = emb_dim
         self.output_dim = output_dim
 
-        # 每个scale一套embedding
+        # Use separate embeddings for each scale.
         self.embeddings = nn.ModuleList([
             nn.Embedding(n_bins, emb_dim) for _ in range(H)
         ])
 
-        # 最终投影到统一维度 D
+        # Finally project to a unified dimension D
         self.proj = nn.Linear(H * emb_dim, output_dim)
 
     def forward(self, i_pitch, device=None):
         """
         Args:
-            i_pitch: (B, L, H)，量化后的pitch，int类型，取值[0, n_bins-1]
+            i_pitch: (B, L, H), quantized pitch, int [0, n_bins-1]
         Returns:
-            x: (B, L, out_dim)，可作为下游模型输入
+            x: (B, L, out_dim)
         """
         i_pitch = i_pitch.to(device)
         B, L, H = i_pitch.shape
         assert H == self.H, f"input H={H}, but expect H={self.H}"
 
-        # 对每个scale做embedding
+        # Perform embedding for each scale.
         emb_list = []
         for h in range(H):
             emb = self.embeddings[h](i_pitch[:, :, h])  # (B, L, emb_dim)
             emb_list.append(emb)
 
-        # 在最后一维拼接 → (B, L, H*emb_dim)
+        # Concatenate along the last dimension → (B, L, H*emb_dim)
         x = torch.cat(emb_list, dim=-1)
 
-        # 投影到 out_dim → (B, L, out_dim)
+        # project to out_dim → (B, L, out_dim)
         x = self.proj(x)
 
         return x.to(device)
@@ -297,98 +297,6 @@ NonTrainableWrapper = namedtuple("NonTrainableWrapper", ["model"])
 from audio_controlnet.ext.autoencoder import AutoEncoderModule
 from audio_controlnet.ext.mel_converter import get_mel_converter
 import torch.nn.functional as F
-    
-class InpaintConditioner(Conditioner):
-    def __init__(self, mode, tod_vae_ckpt, bigvgan_vocoder_ckpt=None, output_dim=40, seq_len = 312, target_rate = 31.2, use_joint_conditioner=False, vae_latent_dim=None):
-        super().__init__()
-        self.output_dim = output_dim
-        self.seq_len = seq_len
-        self.target_rate = target_rate
-        
-        tod = AutoEncoderModule(vae_ckpt_path=tod_vae_ckpt,
-                                vocoder_ckpt_path=bigvgan_vocoder_ckpt,
-                                mode=mode).eval()
-        self.tod = NonTrainableWrapper(tod)
-        mel_converter = get_mel_converter(mode).eval()
-        self.mel_converter = NonTrainableWrapper(mel_converter)
-
-        self.sample_rate = {'16k': 16000, '44k': 44100}[mode]
-        
-        self.use_joint_conditioner = use_joint_conditioner
-        if self.use_joint_conditioner:
-            self.final_linear = nn.Linear(vae_latent_dim + 1, self.output_dim)
-        else:
-            self.mask_emb = nn.Parameter(torch.zeros(output_dim))
-
-    def forward(self, inputs, device=None):
-        """
-        Args:
-            inputs: list[dict], 每个元素都是字典: {"audio": Tensor<'mono channel audio'>, "segments": list[tuple] }
-        Returns:
-            x: (B, L, out_dim)，可作为下游模型输入
-        """
-        self.tod.model.to(device)
-        self.mel_converter.model.to(device)
-        
-        # 对输入的音频padding到需要的长度，并对其segment部分进行静默处理
-        target_len = int(self.seq_len / self.target_rate * self.sample_rate)
-        # breakpoint()
-        batch_waveforms = []
-        for datum in inputs:
-            audio = datum['audio'].to(device)
-
-            # 1. padding / trim 到目标长度
-            if audio.shape[-1] < target_len:
-                pad_len = target_len - audio.shape[-1]
-                audio = F.pad(audio, (0, pad_len))
-            else:
-                audio = audio[:, :target_len]  # 假设 audio shape [1, T]
-
-            # 2. 对 segments 进行静默处理（mask wave）
-            mask_audio = audio.clone()
-            # breakpoint()
-            for st, et in datum['segments']:
-                s_idx = round(st * self.sample_rate)
-                e_idx = round(et * self.sample_rate)
-                mask_audio[:, s_idx:e_idx] = 0.0
-            batch_waveforms.append(mask_audio)
-
-        x = torch.stack(batch_waveforms, dim=0)  # [B, 1, T]
-        
-        # 获取audio的vae latent
-        mel = self.mel_converter.model(x.squeeze(dim=1))
-        dist = self.tod.model.encode(mel)
-        if 'a_randn' in inputs[0]:
-            a_randn = torch.stack([inp['a_randn'] for inp in inputs])
-            latent = (dist.mean + dist.std * a_randn.permute(0,2,1)).detach()
-        else:
-            latent = dist.sample().detach() # [B, output_dim, seq_len]
-        
-        if self.use_joint_conditioner:
-            # 将segments作为0-1 mask拼到latent上
-            B, _vae_dim, _seq_len = latent.shape
-            segments_mask = torch.zeros((B, 1, _seq_len), dtype=latent.dtype).to(latent.device)
-            for i, datum in enumerate(inputs):
-                for st, et in datum['segments']: # st和et都是以秒为单位
-                    # 将时间映射到 latent 时间轴
-                    s_idx = round(st * self.target_rate)  # 简单线性映射
-                    e_idx = min(round(et * self.target_rate), target_len)
-                    segments_mask[i, :, s_idx:e_idx] = 1
-            latent = self.final_linear(torch.cat([latent, segments_mask], dim=1).permute(0, 2, 1)).permute(0, 2, 1)
-        else:
-            # 对vae latent的segment部分置为mask_emb
-            mask = self.mask_emb.unsqueeze(-1)  # [D, 1]
-            for i, datum in enumerate(inputs):
-                for st, et in datum['segments']: # st和et都是以秒为单位
-                    # 将时间映射到 latent 时间轴
-                    s_idx = round(st * self.target_rate)  # 简单线性映射
-                    e_idx = min(round(et * self.target_rate), target_len)
-                    # latent[i, :, s_idx:e_idx] = self.mask_emb.unsqueeze(-1)
-                    mask_region = torch.zeros_like(latent[i, :, s_idx:e_idx])
-                    mask_region = mask_region + mask  # this line creates a differentiable op
-                    latent[i, :, s_idx:e_idx] = latent[i, :, s_idx:e_idx] * 0 + mask_region
-
-        return latent.permute(0, 2, 1) # [B, seq_len, output_dim]
 
 
 class ReferenceConditioner(Conditioner):
@@ -410,14 +318,14 @@ class ReferenceConditioner(Conditioner):
     def forward(self, inputs, device=None):
         """
         Args:
-            inputs: list[dict], 每个元素都是字典: {"audio": Tensor<'mono channel audio'>, "segments": list[tuple] }
+            inputs: list[dict], element: {"audio": Tensor<'mono channel audio'>, "segments": list[tuple] }
         Returns:
-            x: (B, L, out_dim)，可作为下游模型输入
+            x: (B, L, out_dim)
         """
         self.tod.model.to(device)
         self.mel_converter.model.to(device)
         
-        # 对输入的音频padding到需要的长度，并对其segment部分进行静默处理
+        # Pad the input audio to the required length
         target_len = int(self.seq_len / self.target_rate * self.sample_rate)
         # breakpoint()
         if 'audio_vae' not in inputs[0]:
@@ -425,22 +333,20 @@ class ReferenceConditioner(Conditioner):
             for datum in inputs:
                 audio = datum['audio'].to(device)
 
-                # 1. padding / trim 到目标长度
+                # 1. padding / trim to target length
                 if audio.shape[-1] < target_len:
                     pad_len = target_len - audio.shape[-1]
                     audio = F.pad(audio, (0, pad_len))
                 else:
-                    audio = audio[:, :target_len]  # 假设 audio shape [1, T]
+                    audio = audio[:, :target_len] 
 
                 batch_waveforms.append(audio.clone())
 
             x = torch.stack(batch_waveforms, dim=0)  # [B, 1, T]
             
-            # 获取audio的vae latent
+            # get vae latent of audio
             mel = self.mel_converter.model(x.squeeze(dim=1))
             dist = self.tod.model.encode(mel)
-            # TODO: Add a_randn support
-            # dist.mean.shape: torch.Size([24, 40, 430]) ; dist.std.shape: torch.Size([24, 40, 430])
             if 'a_randn' in inputs[0]:
                 a_randn = torch.stack([inp['a_randn'] for inp in inputs])
                 latent = (dist.mean + dist.std * a_randn.permute(0,2,1)).detach()
@@ -465,8 +371,6 @@ def create_conditioner_from_config(name, cfg):
         return LoudnessConditioner(**kwargs)
     elif cfg_type == 'pitch':
         return PitchCWTQConditioner(**kwargs)
-    elif cfg_type == 'inpaint':
-        return InpaintConditioner(**kwargs)
     elif cfg_type == 'reference':
         return ReferenceConditioner(**kwargs)
     elif cfg_type in ('remove', 'insert'):

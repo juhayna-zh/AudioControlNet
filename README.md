@@ -14,7 +14,7 @@ Audio ControlNet enables fine-grained control over audio generation through mult
 
 
 <p>
-  <a href="https://huggingface.co/spaces/chenxie95/AudioControlNet">Huggingface Space Demo</a>
+  <a href="https://huggingface.co/spaces/chenxie95/AudioControlNet">🤗 Huggingface Space Demo</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="https://audio-controlnet.github.io/">Web Demo</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -51,35 +51,8 @@ caption = "A man is speaking while walking, music is playing, and sound effects 
 
 ## 📖 Usage Examples
 
-### 1. Loudness Control
 
-Control the energy dynamics of generated audio using a reference audio file:
-
-```python
-model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-loudness-v1.0')
-
-res = model.infer(
-    caption=caption,
-    control={'loudness': model.prepare_loudness('./reference.flac')}
-)
-torchaudio.save('./output/loudness_controlled.wav', res.audio, res.sample_rate)
-```
-
-### 2. Pitch Control
-
-Control the pitch contour of generated audio:
-
-```python
-model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-pitch-v1.0')
-
-res = model.infer(
-    caption=caption,
-    control={'pitch': model.prepare_pitch('./reference.flac')}
-)
-torchaudio.save('./output/pitch_controlled.wav', res.audio, res.sample_rate)
-```
-
-### 3. Sound Events Control
+### 1. Sound Events Control
 
 Control the timing and occurrence of specific sound events:
 
@@ -99,6 +72,34 @@ res = model.infer(
     control={'events': events}
 )
 torchaudio.save('./output/events_controlled.wav', res.audio, res.sample_rate)
+```
+
+### 2. Loudness Control
+
+Control the energy dynamics of generated audio using a reference audio file:
+
+```python
+model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-loudness-v1.0')
+
+res = model.infer(
+    caption=caption,
+    control={'loudness': model.prepare_loudness('./reference.flac')}
+)
+torchaudio.save('./output/loudness_controlled.wav', res.audio, res.sample_rate)
+```
+
+### 3. Pitch Control
+
+Control the pitch contour of generated audio:
+
+```python
+model = AudioControlNet.from_pretrained('juhayna/T2A-Adapter-pitch-v1.0')
+
+res = model.infer(
+    caption=caption,
+    control={'pitch': model.prepare_pitch('./reference.flac')}
+)
+torchaudio.save('./output/pitch_controlled.wav', res.audio, res.sample_rate)
 ```
 
 ### 4. Multi-Control Generation
@@ -141,7 +142,7 @@ The web interface provides:
 
 ## 🚂 Training
 
-Coming Soon.
+Coming soon. (⏳under preparation and will be released in a few days !)
 
 ## 📋 Citation
 

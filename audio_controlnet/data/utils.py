@@ -149,14 +149,14 @@ def share_tensor_to_all(x: Optional[MemoryMappedTensor]) -> MemoryMappedTensor:
 
 
 def _remove_interval(avail: List[Tuple[float,float]], s: float, e: float):
-    """从可用区间列表中移除 [s,e)，返回新的可用区间列表。"""
+    """Remove [s,e) from the list of available intervals and return the updated list of available intervals."""
     new = []
     for a,b in avail:
         if e <= a or s >= b:
-            # 无交集
+            # no overlap
             new.append((a,b))
         else:
-            # 有交集，可能留下左右两段
+            # with overlap
             if s > a:
                 new.append((a, s))
             if e < b:
@@ -175,21 +175,22 @@ def random_mask_segments(
     seed: Optional[int] = None,
 ) -> List[Tuple[float,float]]:
     """
-    生成随机多段 mask（不定长列表，每段为 (start, end)，单位：秒）。
+    Generate a random multi-segment mask (an indefinite-length list, with each segment being (start, end), in seconds).
 
     Args:
-        duration: 音频总时长（秒），必须 > 0。
-        min_seg: 每段最短长度（秒）。
-        max_seg: 每段最长长度（秒）。
-        min_coverage: 最小遮盖比例（0..1）。
-        max_coverage: 最大遮盖比例（0..1）。
-        min_segments: 最少段数（>=1）。
-        max_segments: 最多段数（>= min_segments）。
-        allow_overlap: 是否允许段之间重叠（默认 False）。
-        seed: 随机种子（可选，用于复现）。
+        duration (float): Total audio duration in seconds, must be > 0.
+        min_seg (float): Minimum length of each segment in seconds.
+        max_seg (float): Maximum length of each segment in seconds.
+        min_coverage (float): Minimum coverage ratio (0..1).
+        max_coverage (float): Maximum coverage ratio (0..1).
+        min_segments (int): Minimum number of segments (>=1).
+        max_segments (int): Maximum number of segments (>= min_segments).
+        allow_overlap (bool, optional): Whether to allow overlap between segments (default False).
+        seed (int, optional): Random seed for reproducibility.
 
     Returns:
-        按时间排序的 (start, end) 列表。若无法生成（例如 duration 非法），返回空列表。
+        List of (start, end) tuples sorted by time. Returns an empty list if generation fails
+        (e.g., invalid duration).
     """
     if duration <= 0:
         return []
@@ -204,67 +205,66 @@ def random_mask_segments(
     min_segments = max(1, int(min_segments))
     max_segments = max(min_segments, int(max_segments))
 
-    # 随机选择段数 & 总遮盖率（以秒为单位）
+    # Randomly select the number of segments & total coverage rate (in seconds)
     num_segments = rng.randint(min_segments, max_segments)
     target_frac = rng.uniform(min_coverage, max_coverage)
     target_mask_total = target_frac * duration
 
-    # 若 target_mask_total 很小且为 0，直接返回空
+    # If target_mask_total is very small, directly return null
     if target_mask_total <= 1e-12:
         return []
 
-    # 保证在段数和长度约束下可实现总遮盖量
-    # 如果不可能（例如 num_segments * min_seg > target），尝试缩小段数直到可行
+    # Ensure that the total coverage can be achieved under the constraints of segment count and length
+    # If it is not possible (e.g., num_segments * min_seg > target), try reducing the segment count until it becomes feasible
     while num_segments > 1 and num_segments * min_seg > target_mask_total:
         num_segments -= 1
-    # 若仍然不行，把 target 提到最小可行值（避免负值）
+    # If it still doesn't work, increase the target to the minimum feasible value (avoiding negative values)
     if num_segments * min_seg > target_mask_total:
         target_mask_total = num_segments * min_seg
 
-    # 同理，保证 target 不超过 num_segments * max_seg
+    # Similarly, ensure that target does not exceed num_segments * max_seg
     if target_mask_total > num_segments * max_seg:
-        # 如果超出，降低 num_segments 尝试适配（直到 num_segments==1）
+        # If it exceeds, reduce num_segments and try to adapt (until num_segments == 1)
         while num_segments > 1 and target_mask_total > num_segments * max_seg:
             num_segments -= 1
-        # 最后仍超出时，将 target_clip 到 num_segments * max_seg
+        # If the time limit is still exceeded, the time will be clipped from target_clip to num_segments * max_seg
         target_mask_total = min(target_mask_total, num_segments * max_seg)
 
-    # 分配每段长度（逐步分配法，确保每段在 [min_seg, max_seg] 且总和约等于 target_mask_total）
+    # Allocate the length of each segment (using a step-by-step allocation method to ensure that each falls within [min_seg, max_seg] and the total is appr target_mask_total)
     lengths = []
     allocated = 0.0
     for i in range(num_segments):
         rem = num_segments - i
-        # 为当前段计算允许的最小/最大值，保证剩余段能满足约束
+        # Calculate the min/max values allowed for the current segment
         min_possible = max(min_seg, target_mask_total - allocated - (rem - 1) * max_seg)
         max_possible = min(max_seg, target_mask_total - allocated - (rem - 1) * min_seg)
         if max_possible < min_possible:
-            # 当数值不一致时把两者对齐，避免异常
+            # Align the two values when they are inconsistent to avoid error
             max_possible = min_possible
         seg_len = rng.uniform(min_possible, max_possible)
         lengths.append(seg_len)
         allocated += seg_len
 
-    # 放置每段（不重叠时要从可用区间挑选）
+    # Place each segment (when not overlapping, select from the available intervals)
     segments: List[Tuple[float,float]] = []
     if allow_overlap:
         for L in lengths:
             start = rng.uniform(0.0, max(0.0, duration - L))
             segments.append((start, start + L))
     else:
-        # 先把要放的段按长度降序排列（先放长段更容易成功）
+        # First, arrange the segments to be placed in descending order of length
         lengths.sort(reverse=True)
-        avail = [(0.0, duration)]  # 可用区间列表
+        avail = [(0.0, duration)]  # avaliable interval list
         for L in lengths:
             placed = False
-            # 尝试若干次随机选区间放置
+            # Try randomly selecting intervals
             attempts = 0
             max_attempts = 50
             while attempts < max_attempts and not placed:
                 attempts += 1
-                # 计算每个可用区间的长度，按长度加权随机选区间
+                # Calculate the length of each available interval, and randomly select an interval based on its length-weighted probability
                 total_avail = sum(b - a for a,b in avail)
                 if total_avail < L - 1e-9:
-                    # 空间不足直接跳出尝试
                     break
                 r = rng.random() * total_avail
                 acc = 0.0
@@ -289,15 +289,14 @@ def random_mask_segments(
                     continue
 
             if not placed:
-                # 退路：尝试把这个段塞入最大可用区间（缩短长度以适配）
+                # Fallback: Try to fit this segment into the largest available interval (reduce its length to fit)
                 if not avail:
-                    # 没有可用区间了，跳过剩余段
                     break
-                # 找到最长可用区间
+                # Find the longest available interval
                 a,b = max(avail, key=lambda x: x[1]-x[0])
                 max_fit = b - a
                 if max_fit < min_seg - 1e-9:
-                    # 最大间隙都太小，放不下最小段，跳出
+                    # The maximum gap is too small to accommodate the smallest segment, jump out
                     break
                 L2 = min(L, max_fit)
                 start = rng.uniform(a, b - L2)
@@ -305,7 +304,7 @@ def random_mask_segments(
                 segments.append((start, end))
                 avail = _remove_interval(avail, start, end)
 
-    # 最后整理：剪入边界，按时间排序并四舍五入（保留 3 位小数）
+    # Final: clip into the boundary, sort by time, and round (with 3 decimal)
     final = []
     for s,e in segments:
         s = max(0.0, min(duration, s))

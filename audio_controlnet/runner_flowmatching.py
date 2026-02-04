@@ -268,7 +268,7 @@ class RunnerFlowMatching:
 
         # breakpoint()
         pred_v = self.network(xt, text_f, text_f_c, t, **kwargs)
-        if self.cfg.get('mask_unmask_ratio', None): # 对mask和非mask部分用不同的loss比例
+        if self.cfg.get('mask_unmask_ratio', None): # Use different loss ratios for mask and non-mask parts
             mask_ratio, unmask_ratio = list(map(float, self.cfg['mask_unmask_ratio'].split(':')))
             if 'inpaint' in kwargs['control']:
                 segments = [ d['segments'] for d in kwargs['control']['inpaint'] ]

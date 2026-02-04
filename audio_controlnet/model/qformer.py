@@ -77,20 +77,3 @@ class EventQFormerWrapper(nn.Module):
         return out
 
 
-
-if __name__ == "__main__":
-    from omegaconf import OmegaConf
-    B, N, E, T = 2, 6, 512, 312
-    output_dim = 20
-    num_events = [3, 5]
-    x = torch.randn(B, N, E, T)
-
-    config = OmegaConf.create(dict(
-        encoder_dim = E,  # embed_dim E
-        llm_dim = output_dim,      # QFormer输出维度
-        qformer_layers = 2,
-        query_len = 4,     # 输出query个数
-    ))
-    model = EventQFormerWrapper(config)
-    y = model(x, num_events)
-    print(y.shape)  # 预期 [B, T, output_dim]

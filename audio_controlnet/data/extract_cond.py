@@ -15,28 +15,22 @@ import numpy as np
 import random
 
 def expand_to(tensor, len, pad_elem=0):
-    # 原始张量长度
     n = tensor.size(0)
     
     if n >= len:
-        # 如果原始长度≥len，直接截取前len个元素
         return tensor[:len]
     else:
-        # 计算需要重复的次数
         pad_times = len - n
         paded_part = torch.ones((pad_times,)) * pad_elem
-        # 拼接原始张量和重复部分
         expanded_tensor = torch.cat([tensor, paded_part])
         return expanded_tensor
     
 def load_audio_mono(audio_path, sample_rate=16000):
     waveform, sr = torchaudio.load(audio_path)  # waveform: [channels, T]
     
-    # 如果不是单声道，取平均
     if waveform.shape[0] > 1:
         waveform = waveform.mean(dim=0, keepdim=True)
     
-    # 重采样到目标采样率
     if sr != sample_rate:
         resampler = torchaudio.transforms.Resample(sr, sample_rate)
         waveform = resampler(waveform)
@@ -57,35 +51,38 @@ def extract_pitch_contour(
     fmax: str = "C7",
     n_bins: int = 256,
     wavelet_widths: np.ndarray = None,
-    target_rate: float = None,  # 帧率 Hz
-    seq_len: int = None,        # 期望帧数
+    target_rate: float = None,  # Hz
+    seq_len: int = None,
     show_plot: bool = False, 
 ):
     """
-    提取论文中描述的 pitch contour，并支持帧率重采样和序列长度调整。
-    
+    Extract the pitch contour as described in the paper, with support for frame rate resampling
+    and sequence length adjustment.
+
     Args:
-        audio_path: 音频路径
-        sr: 采样率
-        fmin, fmax: 基频搜索范围
-        n_bins: 量化 bins 数量（默认 256）
-        wavelet_widths: 小波尺度范围 (默认 [1..32])
-        target_rate: float, 目标帧率 (Hz)，None表示不重采样
-        seq_len: int, 目标序列长度
-        show_plot: 是否显示可视化 heatmap
-    
+        audio_path (str): Path to the audio file.
+        sr (int): Sampling rate.
+        fmin (float): Minimum frequency for pitch search.
+        fmax (float): Maximum frequency for pitch search.
+        n_bins (int, optional): Number of quantization bins (default 256).
+        wavelet_widths (list, optional): Range of wavelet scales (default [1..32]).
+        target_rate (float, optional): Target frame rate in Hz; None means no resampling.
+        seq_len (int, optional): Target sequence length.
+        show_plot (bool, optional): Whether to display a heatmap visualization.
+
     Returns:
-        i_pitch: 量化后的 pitch 序列 (L × H)
-        f0: 原始基频轨迹 (Hz)，长度 L
-        times: 时间轴 (s)，长度 L
+        i_pitch (ndarray): Quantized pitch sequence of shape (L × H).
+        f0 (ndarray): Original pitch trajectory in Hz, length L.
+        times (ndarray): Time axis in seconds, length L.
     """
+
     # -------------------------
-    # 1. 加载音频
+    # 1. Load Audio
     # -------------------------
     y, sr = librosa.load(audio_path, sr=sr)
 
     # -------------------------
-    # 2. 提取连续基频 (Hz)
+    # 2. Extract F0 (Hz)
     # -------------------------
     f0, voiced_flag, voiced_probs = librosa.pyin(
         y,
@@ -94,15 +91,15 @@ def extract_pitch_contour(
         sr=sr
     )
     times = librosa.times_like(f0, sr=sr)
-    f0 = np.nan_to_num(f0)  # 无声帧填0
+    f0 = np.nan_to_num(f0) 
 
     # -------------------------
-    # 3. 转 log 频率
+    # 3. Convert to log F0
     # -------------------------
     f0_log = np.log(f0 + 1e-6)
 
     # -------------------------
-    # 4. 连续小波变换 (CWT)
+    # 4. CWT
     # -------------------------
     if wavelet_widths is None:
         wavelet_widths = np.arange(1, 32)
@@ -110,7 +107,7 @@ def extract_pitch_contour(
     cwt_matrix = cwt_matrix.T  # (L, H)
 
     # -------------------------
-    # 5. 量化 (逐尺度)
+    # 5. Quantize
     # -------------------------
     i_pitch = np.zeros_like(cwt_matrix, dtype=int)
     for h in range(cwt_matrix.shape[1]):
@@ -120,10 +117,10 @@ def extract_pitch_contour(
         i_pitch[:, h] = np.digitize(vals, bins) - 1
 
     # -------------------------
-    # 6. 帧率重采样
+    # 6. Resample
     # -------------------------
     if target_rate is not None:
-        orig_rate = 1 / (times[1] - times[0])  # 原始帧率
+        orig_rate = 1 / (times[1] - times[0])  
         L_new = int(round(len(times) * target_rate / orig_rate))
         times_new = np.linspace(times[0], times[-1], L_new)
         i_pitch_resampled = np.zeros((L_new, i_pitch.shape[1]), dtype=int)
@@ -138,7 +135,7 @@ def extract_pitch_contour(
         f0 = f0_resampled
 
     # -------------------------
-    # 7. 序列长度调整
+    # 7. Adjust seq length
     # -------------------------
     if seq_len is not None:
         L_curr = i_pitch.shape[0]
@@ -153,7 +150,7 @@ def extract_pitch_contour(
             # times = times[:seq_len]
 
     # -------------------------
-    # 8. 可视化
+    # 8. Visualize
     # -------------------------
     if show_plot:
                 
@@ -191,25 +188,25 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         
         y = read_and_resample(meta['path'], sample_rate)
             
-        # 设置hop_length使RMS采样频率为target_rate
+        # Set hop_length to make the RMS sampling frequency equal to target_rate
         hop_length = int(sample_rate / target_rate)  
-        frame_length = 4096  # 可保留原值，也可根据hop_length调整
+        frame_length = 4096 
 
-        # 计算RMS
+        # calc RMS
         rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
 
-        # 计算分贝
+        # calc DB
         min_rms = 1e-6
         rms = np.maximum(rms, min_rms)
         dB = 20 * np.log10(rms / np.max(rms))
 
-        # savgol平滑
+        # savgol filter
         smooth_savgol = savgol_filter(dB, window_length=11, polyorder=3)
 
         return expand_to(torch.from_numpy(smooth_savgol), len=seq_len)
     
     elif control_type == 'pitch':
-        # 量化的pitch cwt特征
+        # quantized pitch cwt
         seq_len = ds.conditioners_config.pitch.seq_len
         target_rate = ds.conditioners_config.pitch.target_rate
         
@@ -226,13 +223,13 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         sample_rate = {'16k': 16000, '44k': 44100}[mode]
         audio_path = meta['path']
 
-        # 1. 读音频
+        # 1. read audio
         waveform, sr = load_audio_mono(audio_path, sample_rate)
 
-        # 2. 获取音频时长（秒）
+        # 2. Get audio duration (seconds)
         duration = waveform.shape[1] / sr
 
-        # 3.1 生成 mask segments
+        # 3.1 generate mask segments
         segs = random_mask_segments(
             duration=duration,
             # min_seg=0.2,
@@ -246,11 +243,11 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
             allow_overlap=False,
             seed=None
         )
-        # 3.2 将mask部分的waveform置零
+        # 3.2 set masked part to 0
         for st, et in segs:
             waveform[:, round(st*sample_rate):round(et*sample_rate)] = 0
 
-        # 4. 返回字典
+        # 4. Return
         return {
             "audio": waveform,  # Tensor [1, T]
             "segments": segs,   # list of (start_sec, end_sec)
@@ -390,26 +387,6 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
 
         # 返回 (reference, target, event)
         return {'audio': waveform}, {'audio': mixed}, {bg_meta['caption']: [(start_sec, end_sec)]}
-
-    elif control_type == 'f0':
-        waveform, sr = torchaudio.load(path)
-        y = waveform.numpy()
-        if len(y.shape) == 2:
-            y = y.mean(axis=0)
-        sr = ds.sample_rate
-        duration = len(y) / sr
-
-        # 设置 hop_length，使 f0 长度为 21.5 * duration
-        hop_length = int(sr / 21.5)
-
-        # 使用 YIN 算法提取基频
-        f0 = librosa.yin(y, fmin=80, fmax=400, sr=sr, hop_length=hop_length)
-
-        # 高斯平滑处理
-        sigma = 1
-        smoothed_f0 = gaussian_filter1d(f0, sigma=sigma)
-
-        return torch.from_numpy(smoothed_f0).float()
 
     elif control_type == 'centroid':
         waveform, sr = torchaudio.load(path)

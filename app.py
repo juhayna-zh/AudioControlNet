@@ -1,4 +1,9 @@
 import gradio as gr
+try:
+    import spaces
+    require_gpu = spaces.GPU
+except:
+    require_gpu = lambda f: f
 import torch
 import numpy as np
 import librosa
@@ -8,9 +13,91 @@ import json5
 import torchaudio
 import tempfile
 import os
+import random
 from audio_controlnet.infer import AudioControlNet
 
+import logging
+logging.getLogger("gradio").setLevel(logging.WARNING)
+
 MAX_DURATION = 10.0  # seconds
+
+# -----------------------------
+# Random Examples Data
+# -----------------------------
+RANDOM_EXAMPLES = [
+  {
+    "caption": "People speak and clap, a child speaks and a camera clicks.",
+    "events": {
+      "Female speech, woman speaking": [[0.0, 3.969], [7.913, 8.157], [8.189, 9.654]],
+      "Child speech, kid speaking": [[9.724, 10.0]]
+    }
+  },
+  {
+    "caption": "Background noise, tapping, and cat sounds are interspersed with purring.",
+    "events": {
+      "Cat": [[0.978, 2.291], [9.032, 10.0]]
+    }
+  },
+  {
+    "caption": "Animals, dogs, and people are growling, shouting, and speaking.",
+    "events": {
+      "Dog": [[0.005, 0.165], [0.717, 1.529], [1.981, 3.139], [3.569, 4.562], [4.87, 5.964], [6.389, 7.621], [8.067, 8.98], [9.299, 9.878]],
+      "Speech": [[0.149, 0.738], [1.609, 1.954], [4.583, 4.886], [7.631, 8.024], [9.007, 9.288]],
+      "Male speech, man speaking": [[3.202, 3.532], [5.975, 6.378], [9.878, 10.0]]
+    }
+  },
+  {
+    "caption": "Water flows and dishes clatter with child speech and laughter.",
+    "events": {
+      "Child speech, kid speaking": [[0.0, 1.503], [1.732, 2.12], [2.942, 3.541], [7.803, 8.493]],
+      "Dishes, pots, and pans": [[1.983, 2.156], [3.175, 3.298], [4.774, 5.076], [5.711, 5.834], [6.076, 6.24], [6.423, 7.012]],
+      "Male speech, man speaking": [[8.547, 9.557]],
+      "Water tap, faucet": [[0.0, 10.0]]
+    }
+  },
+  {
+    "caption": "Speech babble and clattering dishes and silverware can be heard, along with a child's voice.",
+    "events": {
+      "Dishes, pots, and pans": [[0.85, 0.969], [1.386, 1.504], [7.717, 7.874]],
+      "Male speech, man speaking": [[0.748, 1.173]],
+      "Cutlery, silverware": [[4.693, 4.843], [5.299, 5.52]],
+      "Female speech, woman speaking": [[1.63, 3.409]],
+      "Child speech, kid speaking": [[8.756, 9.354]]
+    }
+  },
+  {
+    "caption": "A man is speaking, with background sounds of wind and a river, and another man sighing and speaking.", 
+    "events": {"Male speech, man speaking": [[0.0, 7.851], [8.903, 9.129], [9.328, 9.98]], "Conversation": [[0.0, 9.98]], "Wind": [[0.0, 9.98]], "Stream, river": [[0.0, 9.98]], "Sigh": [[8.157, 8.707]]}
+  },
+  {
+    "caption": "Wind noise and cowbell are heard twice.", 
+    "events": {"Wind noise (microphone)": [[0.0, 1.15], [2.378, 2.961]], "Cowbell": [[0.0, 10.0]]}
+  },
+  {
+    "caption": "There are mechanisms, bird calls, clicking, and male speech.", 
+    "events": {"Mechanisms": [[0.0, 10.0]], "Bird vocalization, bird call, bird song": [[1.122, 1.423]], "Clicking": [[1.139, 1.238], [4.737, 4.858]], "Male speech, man speaking": [[1.95, 2.875], [5.182, 5.795], [6.113, 6.807], [7.386, 8.138], [8.236, 8.803], [9.427, 10.0]]}
+  },
+  {
+    "caption": "Propeller noise and a sound effect.", 
+    "events": {"Propeller, airscrew": [[1.779, 10.0]], "Sound effect": [[1.811, 2.868]]}
+  },
+  {
+    "caption": "Women converse and laugh in a noisy crowd.", 
+    "events": {"Female speech, woman speaking": [[0.0, 1.669], [2.097, 2.976], [4.66, 8.98]], "Conversation": [[0.0, 9.379]], "Background noise": [[0.0, 9.379]], "Generic impact sounds": [[0.096, 0.318], [3.707, 3.944], [6.107, 6.314], [7.584, 7.695], [8.256, 8.367]], "Laughter": [[1.573, 2.947], [4.461, 6.174], [9.002, 9.364]], "Crowd": [[1.573, 2.954], [4.512, 6.129], [9.002, 9.379]], "Tick": [[1.691, 1.795], [4.276, 4.372]], "Sound effect": [[3.212, 4.416]]}
+  }
+]
+def build_events_json_text(events):
+    ret = ''
+    for key,times in events.items():
+        ret += f'    "{key}": {times},\n'
+    ret = ret.strip(',')
+    return '{\n'+ret+'}'
+
+def generate_random_example():
+    """Generate a random example with caption and sound events"""
+    example = random.choice(RANDOM_EXAMPLES)
+    events_json = build_events_json_text(example["events"])
+    return example["caption"], events_json
 
 # -----------------------------
 # Feature extraction utilities
@@ -125,6 +212,7 @@ def save_temp_wav(audio):
 # -----------------------------
 # Generate audio
 # -----------------------------
+@require_gpu
 def generate_audio(text, cond_loudness, cond_pitch, cond_events):
     control = {}
     temp_files = []
@@ -164,23 +252,26 @@ def generate_audio(text, cond_loudness, cond_pitch, cond_events):
 # -----------------------------
 blue_theme = gr.themes.Soft(primary_hue="blue", secondary_hue="sky", neutral_hue="slate")
 
+CAPTION_PLACEHOLDER = 'Water flows and dishes clatter with child speech and laughter.'
+
 EVENTS_PLACEHOLDER = '''
 // example
 {
-    "Video game sound": [[0.0, 10.0]], 
-    "Male speech, man speaking": [[0.015, 3.829], [4.293, 4.875], [5.089, 7.349], [8.071, 9.978]]
+    "Child speech, kid speaking": [[0.0, 1.503], [1.732, 2.12], [2.942, 3.541], [7.803, 8.493]],
+    "Dishes, pots, and pans": [[1.983, 2.156], [3.175, 3.298], [4.774, 5.076], [5.711, 5.834], [6.076, 6.24], [6.423, 7.012]],
+    "Water tap, faucet": [[0.0, 10.0]]
 }
 '''.strip()
 
 with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as demo:
     gr.Markdown("""
         # 🎵 Audio ControlNet
-        ## Text-to-Audio Generation with Conditions
-        Base T2A interface with conditional inputs for **Audio ControlNet**.
+        ## Fine-Grained Text-to-Audio Generation with Conditions
+        T2A GUI interface with conditional inputs for **Audio ControlNet**.
     """)
     gr.HTML("""
     <style>
-    .plot-small { height: 250px !important; }
+    .plot-small { height: 280px !important; }
     </style>
     """)
 
@@ -188,11 +279,19 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
         with gr.Column(scale=2):
             text_prompt = gr.Textbox(
                 label="Text Prompt",
-                placeholder="A calm ambient soundscape with soft pads and distant piano",
+                placeholder=CAPTION_PLACEHOLDER,
                 lines=4,
             )
 
             with gr.Tabs() as tabs:
+                with gr.Tab("Sound Events") as tab_events:
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            sound_events = gr.Textbox(label="Sound Events (JSON)", placeholder=EVENTS_PLACEHOLDER, lines=8)
+                            random_example_btn = gr.Button("🎲 Random Example", variant="primary", size="sm")
+                        with gr.Column(scale=1):
+                            events_plot = gr.Plot(label="Sound Events Roll", elem_classes="plot-small")
+                            
                 with gr.Tab("Loudness") as tab_loudness:
                     with gr.Row():
                         with gr.Column(scale=1):
@@ -207,13 +306,6 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
                         with gr.Column(scale=1):
                             pitch_plot = gr.Plot(label="Pitch Curve (Reference Audio)", elem_classes="plot-small")
 
-                with gr.Tab("Sound Events") as tab_events:
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            sound_events = gr.Textbox(label="Sound Events (JSON)", placeholder=EVENTS_PLACEHOLDER, lines=8)
-                        with gr.Column(scale=1):
-                            events_plot = gr.Plot(label="Sound Events Roll", elem_classes="plot-small")
-
             generate_btn = gr.Button("Generate Audio", variant="primary")
 
         with gr.Column(scale=1):
@@ -222,6 +314,13 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
     loudness_audio.change(fn=extract_loudness, inputs=loudness_audio, outputs=loudness_plot)
     pitch_audio.change(fn=extract_pitch, inputs=pitch_audio, outputs=pitch_plot)
     sound_events.change(fn=visualize_events, inputs=sound_events, outputs=events_plot)
+    
+    # Random example button event
+    random_example_btn.click(
+        fn=generate_random_example,
+        inputs=[],
+        outputs=[text_prompt, sound_events]
+    )
 
     generate_btn.click(
         fn=generate_audio,
@@ -242,4 +341,4 @@ with gr.Blocks(theme=blue_theme, title="Audio ControlNet – Text to Audio") as 
     """)
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0")
+    demo.launch(server_name="0.0.0.0", quiet=True)

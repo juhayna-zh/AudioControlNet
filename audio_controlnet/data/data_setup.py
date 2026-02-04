@@ -23,7 +23,7 @@ def worker_init_fn(worker_id: int):
     random.seed(worker_seed)
     log.debug(f'Worker {worker_id} re-seeded with seed {worker_seed} in rank {local_rank}')
 
-# 在此处配置需要传入dataset的参数
+# Config the parameters that need to be passed into the dataset here
 def load_audio_data(cfg: DictConfig, data_cfg: DictConfig) -> Dataset: 
     dataset = ExtractedAudio(metadata_path=data_cfg.metadata, 
                             concat_text_fc=cfg.concat_text_fc,   # FIX here we determine usage of concat based on global config

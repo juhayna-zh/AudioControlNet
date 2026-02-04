@@ -328,7 +328,7 @@ class ControlFluxAudio(FluxAudio):
         
         # load checkpoints of base model
         checkpoint = load_weights_auto(base_model_checkpoint, device='cpu')
-        # if use LoRA，only load the param of original model
+        # if use LoRA, only load the param of original model
         if use_lora:
             msg = self.load_state_dict(checkpoint, strict=False)
             for key in msg.missing_keys:

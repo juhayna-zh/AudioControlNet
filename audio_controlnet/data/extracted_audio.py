@@ -158,8 +158,6 @@ class ExtractedAudio(Dataset):
             'caption': self.df_list[idx]['caption'],
         }
         
-        # 添加condition返回
-        # breakpoint()
         out_dict.update(extract_all_conditions(self, self.df_list[idx]))
         if 'insert' in out_dict:
             out_dict['target'] = out_dict['insert']['target']
@@ -167,7 +165,6 @@ class ExtractedAudio(Dataset):
             out_dict['text_features'] = self.empty_string_feat
             out_dict['text_features_c'] = self.empty_string_feat_c
         
-        # NOTE: 实际上对于remove和insert来说应该要把caption置为空的
         if 'remove' in out_dict or 'insert' in out_dict:
             out_dict['caption'] = ''
         # import torchaudio

@@ -262,7 +262,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         audio_path = meta['path']
         waveform, sr = load_audio_mono(audio_path, sample_rate)
 
-        # 1. 随机取背景音
+        # 1. Select background
         if "bg_meta" in meta:
             bg_meta = meta["bg_meta"]
         else:
@@ -275,7 +275,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         else:
             raise NotImplementedError
 
-        # 2. 随机混合位置
+        # 2.  random insert
         main_len = waveform.shape[1]
         bg_len = bg_waveform.shape[1]
         if "bg_start" in meta:
@@ -289,7 +289,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
 
         end_sample = start_sample + bg_len
 
-        # 3. 对齐能量（RMS 级），确保背景音不低于主音频
+        # 3. Align the energy (RMS level) to ensure that the background is not lower than the main audio
         def rms(x):
             return torch.sqrt(torch.mean(x ** 2) + 1e-8)
 
@@ -300,21 +300,20 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         bg_gain = bg_gain_factor * scale
         bg_waveform = bg_waveform * bg_gain
 
-        # 4. 混合
+        # 4. Mix
         mixed = waveform.clone()
         mixed[:, start_sample:end_sample] += bg_waveform
 
-        # 5. 峰值归一化（避免削波 + 保持一致）
+        # 5. Normalization
         peak = max(mixed.abs().max(), waveform.abs().max())
         if peak > 1.0:
             waveform = waveform / peak
             mixed = mixed / peak
 
-        # 6. 时间段（秒）
+        # 6. Time
         start_sec = start_sample / sample_rate
         end_sec = end_sample / sample_rate
 
-        # 返回混合结果与时间段
         return {'audio': mixed}, {bg_meta['caption']: [(start_sec, end_sec)]}
     
     elif control_type == 'insert':  # reference, target, events
@@ -332,7 +331,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         waveform = waveform[:, :wav_len]
         waveform = torch.nn.functional.pad(waveform, (0, wav_len - waveform.shape[-1]), value=0)
 
-        # 1. 选择背景音
+        # 1. Select background
         if "bg_meta" in meta:
             bg_meta = meta["bg_meta"]
         else:
@@ -346,7 +345,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         else:
             raise NotImplementedError
 
-        # 2. 随机插入位置
+        # 2. random insert
         main_len = waveform.shape[1]
         bg_len = bg_waveform.shape[1]
         if "bg_start" in meta:
@@ -360,7 +359,7 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
 
         end_sample = start_sample + bg_len
 
-        # 3. 对齐能量（RMS级），确保背景音至少不低于主音频
+        # 3. Align the energy (RMS level) to ensure that the background is not lower than the main audio
         def rms(x):
             return torch.sqrt(torch.mean(x ** 2) + 1e-8)
 
@@ -371,99 +370,23 @@ def extract_condition(ds, control_type, meta, sample_rate = 44100):
         bg_gain = bg_gain_factor * scale
         bg_waveform = bg_waveform * bg_gain
 
-        # 4. 混合
+        # 4. Mix
         mixed = waveform.clone()
         mixed[:, start_sample:end_sample] += bg_waveform
 
-        # 5. 峰值归一化（避免削波，同时保持waveform与mixed可比）
+        # 5. Normalization
         peak = max(mixed.abs().max(), waveform.abs().max())
         if peak > 1.0:
             waveform = waveform / peak
             mixed = mixed / peak
 
-        # 6. 计算时间（秒）
+        # 6. Time
         start_sec = start_sample / sample_rate
         end_sec = end_sample / sample_rate
 
-        # 返回 (reference, target, event)
         return {'audio': waveform}, {'audio': mixed}, {bg_meta['caption']: [(start_sec, end_sec)]}
-
-    elif control_type == 'centroid':
-        waveform, sr = torchaudio.load(path)
-        y = waveform.numpy()
-        if len(y.shape) == 2:
-            y = y.mean(axis=0)
-        sr = ds.sample_rate
-        target_rate = 21.5
-        hop_length = int(sr / target_rate)
-
-        # 提取谱质心（shape: [1, T]）
-        centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
-        centroid = np.log(centroid+1e-6)
-
-        # 时间轴
-        frames = np.arange(len(centroid))
-        times = frames * hop_length / sr
-
-        # # 高斯滤波
-        # centroid_gauss = gaussian_filter1d(centroid, sigma=5)
-        # 中值滤波（kernel size 5，必须为奇数）
-        centroid_median = medfilt(centroid, kernel_size=5)
-
-        return torch.from_numpy(centroid_median).float()
-
-    elif control_type == 'vocal':
-        path = meta["vocal"]
-
-        waveform, sr = torchaudio.load(path)
-        waveform = waveform[:2, ...]
-        if waveform.shape[0] == 1:
-            waveform = torch.cat([waveform, waveform], dim=0)
-
-        # 重采样
-        if sr != ds.sample_rate:
-            waveform = resample(waveform, orig_freq=sr, new_freq=ds.sample_rate)
-            sr = ds.sample_rate
-
-        total_duration = waveform.shape[-1] / sr
-
-        if ds.chunk_dur is not None:
-            chunk_size = int(ds.chunk_dur * sr)
-            current_size = waveform.shape[-1]
-
-            if current_size > chunk_size:
-                # 裁剪
-                max_offset = current_size - chunk_size
-                offset = meta['offset']
-                waveform = waveform[:, offset:offset + chunk_size]
-                start_sec = offset / sr
-            elif current_size < chunk_size:
-                # 右侧 zero-padding
-                pad_size = chunk_size - current_size
-                pad = torch.zeros((waveform.shape[0], pad_size), dtype=waveform.dtype)
-                waveform = torch.cat([waveform, pad], dim=-1)
-                start_sec = 0.0
-            else:
-                # 刚好等于 chunk_size，无需处理
-                start_sec = 0.0
-        else:
-            start_sec = 0.0
-        return waveform
     elif control_type == 'events':
         return meta['events']
-    elif control_type == 'chord':
-        if isinstance(meta['chord'], str):
-            with open(meta['chord']) as f:
-                lines = f.readlines()
-            chord_data = []
-            for line in lines:
-                if len(line.strip()) == 0:
-                    continue
-                st, et, ch = line.strip().split()
-                chord_data.append((float(st), float(et), ch))
-            return chord_data
-        else:
-            return meta['chord']
     else:
         raise NotImplementedError
     
@@ -471,15 +394,15 @@ def extract_all_conditions(ds, meta, sample_rate = 44100):
     ret = {}
     for ct in ds.control_types:
         if ct == 'reference':
-            continue # reference 将在remove中完成初始化
+            continue # reference will be initialized later
         elif ct in ['remove']:
             reference, ret[ct] = extract_condition(ds, ct, meta, sample_rate=sample_rate)
             if 'reference' in ds.control_types: 
-                # 如果有reference controlnet，则直接将reference给到一个条件
+                # If there is a reference controlnet, directly assign the reference to a condition
                 assert ret.get('reference', None) is None
                 ret['reference'] = reference
             else:
-                # 否则，直接把reference给到输入中
+                # Otherwise, directly provide the reference to the input
                 ret[ct] = {"events": ret[ct], "reference": reference}
         elif ct in ['insert']:
             reference, target, events = extract_condition(ds, ct, meta, sample_rate=sample_rate)

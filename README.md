@@ -16,9 +16,9 @@ Audio ControlNet enables fine-grained control over audio generation through mult
 <p>
   <a href="https://huggingface.co/spaces/chenxie95/AudioControlNet">🤗 Huggingface Space Demo</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://audio-controlnet.github.io/">Web Demo</a>
+  <a href="https://audio-controlnet.github.io/">🌐 Web Demo</a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://huggingface.co/collections/juhayna/audio-controlnet">HuggingFace Checkpoints</a>
+  <a href="https://huggingface.co/collections/juhayna/audio-controlnet">🤗 HuggingFace Checkpoints</a>
 </p>
 
 ## 🎯 Supported Control Types
@@ -45,8 +45,15 @@ This will install all required dependencies including PyTorch, librosa, transfor
 ```python
 from audio_controlnet.infer import AudioControlNet
 
+model = AudioControlNet.from_pretrained(MODEL_NAME)
+
 # Generate audio with text prompt
 caption = "A man is speaking while walking, music is playing, and sound effects are heard."
+
+res = model.infer(
+    caption=caption,
+    control=CONTROLS,
+)
 ```
 
 ## 📖 Usage Examples

@@ -2,7 +2,7 @@
 
 <div>
   <a href='#'><img alt="Static Badge" src="https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white"></a>
-  <a href='https://arxiv.org/abs/COMING.SOON'><img alt="Static Badge" src="https://img.shields.io/badge/arXiv-COMING.SOON-%23b31b1b?logo=arxiv&link=https%3A%2F%2Farxiv.org%2F"></a>
+  <a href='https://arxiv.org/abs/2602.04680'><img alt="Static Badge" src="https://img.shields.io/badge/arXiv-2602.04680-%23b31b1b?logo=arxiv&link=https%3A%2F%2Farxiv.org%2F"></a>
   <a href='https://huggingface.co/spaces/chenxie95/AudioControlNet'><img alt="Static Badge" src="https://img.shields.io/badge/Huggingface%20Space-AudioControlNet-%23FFD21E?logo=huggingface"></a>
   <a href='https://audio-controlnet.github.io/'><img alt="Static Badge" src="https://img.shields.io/badge/Website-Demo-green?logo=github&logoColor=white"></a>
 </div>
@@ -153,7 +153,14 @@ Coming soon. (⏳under preparation and will be released in a few days !)
 
 ## 📋 Citation
 
-Coming soon.
+```
+@article{zhu2026audiocontrolnet,
+      title={Audio ControlNet for Fine-Grained Audio Generation and Editing}, 
+      author={Haina Zhu and Yao Xiao and Xiquan Li and Ziyang Ma and Jianwei Yu and Bowen Zhang and Mingqi Yang and Xie Chen},
+      journal={arXiv preprint arXiv:2602.04680},
+      year={2026}
+}
+```
 
 ## 🙏 Acknowledgements
 
